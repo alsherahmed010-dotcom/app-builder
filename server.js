@@ -98,7 +98,6 @@ app.post('/api/build/:id', async (req, res) => {
     const appDir = path.join(__dirname, 'builds', String(id));
     
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
-    fs.mkdirSync(`${appDir}/res/mipmap`, { recursive: true });
     
     let htmlContent = appData.content;
     if (appData.app_type === 'webview') {
@@ -107,24 +106,14 @@ app.post('/api/build/:id', async (req, res) => {
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     
-    // نسخ الأيقونة
-    let hasIcon = false;
-    if (appData.icon_url) {
-      const iconPath = path.join(__dirname, appData.icon_url);
-      if (fs.existsSync(iconPath)) {
-        fs.copyFileSync(iconPath, `${appDir}/res/mipmap/ic_launcher.png`);
-        hasIcon = true;
-        console.log('✅ Icon ready for build');
-      }
-    }
-    
-    const iconAttr = hasIcon ? ' android:icon="@mipmap/ic_launcher"' : '';
+    // من غير أيقونة في الـ APK (نركز على نجاح البناء الأول)
+    // الأيقونة هتظهر في صفحة تطبيقاتي بس
     
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="${appData.name}"${iconAttr} android:usesCleartextTraffic="true">
+    <application android:label="${appData.name}" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -151,12 +140,10 @@ public class MainActivity extends Activity {
     }
 }`);
     
-    const resArg = hasIcon ? '-R res' : '';
-    
     const buildCmd = `cd ${appDir} && \
     javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
     $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
-    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets ${resArg} && \
+    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets && \
     $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
     $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
     cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null; \
