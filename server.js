@@ -54,8 +54,6 @@ app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    console.log('📸 Icon:', icon_url);
-    
     const result = await pool.query(
       'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [name, package_name, app_type, content, icon_url]
@@ -98,7 +96,6 @@ app.post('/api/build/:id', async (req, res) => {
     const appDir = path.join(__dirname, 'builds', String(id));
     
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
-    fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     
     let htmlContent = appData.content;
     if (appData.app_type === 'webview') {
@@ -107,25 +104,20 @@ app.post('/api/build/:id', async (req, res) => {
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     
-    // نسخ الأيقونة مع اسم مختلف
-    let hasIcon = false;
+    // نسخ الأيقونة للأصول كملف icon.png
     if (appData.icon_url) {
       const iconPath = path.join(__dirname, appData.icon_url);
       if (fs.existsSync(iconPath)) {
-        fs.copyFileSync(iconPath, `${appDir}/res/drawable/icon.png`);
-        hasIcon = true;
-        console.log('✅ Icon ready at res/drawable/icon.png');
+        fs.copyFileSync(iconPath, `${appDir}/assets/icon.png`);
+        console.log('✅ Icon copied to assets');
       }
     }
-    
-    // Manifest من غير أيقونة لو مفيش
-    const iconAttr = hasIcon ? ' android:icon="@drawable/icon"' : '';
     
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="${appData.name}"${iconAttr} android:usesCleartextTraffic="true">
+    <application android:label="${appData.name}" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -152,13 +144,10 @@ public class MainActivity extends Activity {
     }
 }`);
     
-    // نستخدم -R res بس لو فيه أيقونة
-    const resArg = hasIcon ? '-R res' : '';
-    
     const buildCmd = `cd ${appDir} && \
     javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
     $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
-    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets ${resArg} && \
+    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets && \
     $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
     $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
     cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null; \
