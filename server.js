@@ -79,53 +79,93 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// إرسال إشعار FCM حقيقي
-app.post('/api/notify/:id', async (req, res) => {
+// محتوى التطبيق - بدون أخطاء JavaScript
+app.get('/api/app-content/:id', async (req, res) => {
   try {
-    const { title, message, type, sound } = req.body;
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     
-    // حفظ الإشعار في قاعدة البيانات
-    await pool.query(
-      'INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)',
-      [req.params.id, title, message, type, sound]
-    );
+    const appData = result.rows[0];
+    let content = appData.content || '';
+    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
     
-    // جلب FCM token للتطبيق
-    const appResult = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
-    const appData = appResult.rows[0];
-    
-    // إرسال FCM (لو فيه token)
-    if (appData.fcm_token) {
-      // هنا هنبعت عبر FCM API
-      const fcmPayload = {
-        to: appData.fcm_token,
-        notification: {
-          title: title,
-          body: message,
-          sound: sound === 'default' ? 'default' : sound === 'silent' ? null : 'notification_sound.mp3'
-        },
-        data: {
-          type: type,
-          title: title,
-          message: message
-        }
-      };
-      
-      console.log('📢 Sending FCM:', fcmPayload);
+    // رسالة ترحيب
+    if (appData.welcome_message) {
+      content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
     }
     
-    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
+    // رسالة خروج
+    if (appData.exit_message) {
+      content += `<script>window.addEventListener('beforeunload', function(e) { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
+    }
+    
+    // فحص التحديث والإشعارات - بدون أخطاء
+    content += `
+<script>
+(function() {
+    var _appVersion = ${parseInt(appData.version) || 1};
+    var _lastNotifId = 0;
+    
+    // فحص التحديث
+    setInterval(function() {
+        try {
+            fetch('${apiBase}/api/check-update/${req.params.id}')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.version > _appVersion && data.latest_apk_url) {
+                        if (confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟')) {
+                            window.open('${apiBase}' + data.latest_apk_url, '_blank');
+                        }
+                    }
+                })
+                .catch(function() {});
+        } catch(e) {}
+    }, 30000);
+    
+    // فحص الإشعارات
+    setInterval(function() {
+        try {
+            fetch('${apiBase}/api/notifications/${req.params.id}')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.notifications && data.notifications.length > 0) {
+                        var last = data.notifications[0];
+                        if (last.id !== _lastNotifId) {
+                            _lastNotifId = last.id;
+                            if (${appData.notification_enabled ? 'true' : 'false'}) {
+                                if (last.type === 'in-app' || last.type === 'both') {
+                                    alert('📢 ' + last.title + '\\n\\n' + last.message);
+                                }
+                                if (last.sound === 'beep') {
+                                    try {
+                                        var audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAA=');
+                                        audio.play();
+                                    } catch(e) {}
+                                }
+                            }
+                        }
+                    }
+                })
+                .catch(function() {});
+        } catch(e) {}
+    }, 10000);
+})();
+</script>`;
+    
+    res.send(content);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// تسجيل FCM token من التطبيق
-app.post('/api/register-token/:id', async (req, res) => {
+app.post('/api/notify/:id', async (req, res) => {
   try {
-    const { token } = req.body;
-    await pool.query('UPDATE apps SET fcm_token = $1 WHERE id = $2', [token, req.params.id]);
-    res.json({ success: true });
+    const { title, message, type, sound } = req.body;
+    await pool.query(
+      'INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)',
+      [req.params.id, title, message, type, sound]
+    );
+    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -140,63 +180,11 @@ app.get('/api/notifications/:appId', async (req, res) => {
   }
 });
 
-app.get('/api/app-content/:id', async (req, res) => {
+app.get('/api/check-update/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    
-    const appData = result.rows[0];
-    let content = appData.content;
-    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
-    
-    if (appData.welcome_message) {
-      content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
-    }
-    
-    content += `
-<script>
-window._appVersion = ${appData.version};
-window._lastNotifId = 0;
-
-// فحص التحديث
-setInterval(async () => {
-    try {
-        const res = await fetch('${apiBase}/api/check-update/${req.params.id}');
-        const data = await res.json();
-        if (data.version > window._appVersion && data.latest_apk_url) {
-            if (confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟')) {
-                window.open('${apiBase}' + data.latest_apk_url, '_blank');
-            }
-        }
-    } catch(e) {}
-}, 30000);
-
-// فحص الإشعارات
-setInterval(async () => {
-    try {
-        const res = await fetch('${apiBase}/api/notifications/${req.params.id}');
-        const data = await res.json();
-        if (data.notifications.length > 0) {
-            const last = data.notifications[0];
-            if (last.id !== window._lastNotifId) {
-                window._lastNotifId = last.id;
-                if ('${appData.notification_enabled}' === 'true') {
-                    if ('${last.type}' === 'in-app' || '${last.type}' === 'both') {
-                        alert('📢 ' + last.title + '\\n\\n' + last.message);
-                    }
-                    if ('${last.sound}' === 'beep') {
-                        // تشغيل صوت بييب
-                        const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAA=');
-                        audio.play();
-                    }
-                }
-            }
-        }
-    } catch(e) {}
-}, 10000);
-</script>`;
-    
-    res.send(content);
+    res.json({ success: true, version: result.rows[0].version, latest_apk_url: result.rows[0].latest_apk_url });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
