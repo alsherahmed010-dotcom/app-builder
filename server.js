@@ -13,7 +13,7 @@ fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+  filename: (req, file, cb) => cb(null, Date.now() + '.png')
 });
 const upload = multer({ storage });
 
@@ -29,10 +29,37 @@ const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized
 
 async function initDB() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS icon_url TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS apk_url TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS apps (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        package_name VARCHAR(255) NOT NULL,
+        app_type VARCHAR(50) DEFAULT 'html',
+        content TEXT,
+        icon_url TEXT,
+        apk_url TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        description TEXT,
+        fps INTEGER DEFAULT 120,
+        welcome_message TEXT,
+        exit_message TEXT,
+        notification_enabled BOOLEAN DEFAULT false,
+        admob_enabled BOOLEAN DEFAULT false,
+        admob_banner_id TEXT,
+        admob_interstitial_id TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS description TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS fps INTEGER DEFAULT 120`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS welcome_message TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS exit_message TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS notification_enabled BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_enabled BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_banner_id TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_interstitial_id TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -50,13 +77,16 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
+// إنشاء تطبيق جديد
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
-    const { name, package_name, app_type, content } = req.body;
+    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
+    
     const result = await pool.query(
-      'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [name, package_name, app_type, content, icon_url]
+      `INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) 
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [name, package_name, app_type, content, icon_url, description, fps || 120, welcome_message, exit_message, notification_enabled === 'true' || notification_enabled === true, admob_enabled === 'true' || admob_enabled === true, admob_banner_id, admob_interstitial_id]
     );
     res.json({ success: true, app: result.rows[0] });
   } catch (e) {
@@ -64,6 +94,7 @@ app.post('/api/apps', upload.single('icon'), async (req, res) => {
   }
 });
 
+// الحصول على التطبيقات
 app.get('/api/apps', async (req, res) => {
   try {
     const result = await pool.query('SELECT DISTINCT ON (package_name) * FROM apps ORDER BY package_name, created_at DESC');
@@ -73,6 +104,7 @@ app.get('/api/apps', async (req, res) => {
   }
 });
 
+// تطبيق محدد
 app.get('/api/apps/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -83,6 +115,41 @@ app.get('/api/apps/:id', async (req, res) => {
   }
 });
 
+// تحديث تطبيق
+app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
+  try {
+    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
+    const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
+    
+    let query = `UPDATE apps SET name=$1, package_name=$2, app_type=$3, content=$4, description=$5, fps=$6, welcome_message=$7, exit_message=$8, notification_enabled=$9, admob_enabled=$10, admob_banner_id=$11, admob_interstitial_id=$12, version=version+1, updated_at=NOW()`;
+    const params = [name, package_name, app_type, content, description, fps || 120, welcome_message, exit_message, notification_enabled === 'true' || notification_enabled === true, admob_enabled === 'true' || admob_enabled === true, admob_banner_id, admob_interstitial_id];
+    
+    if (icon_url) {
+      query += `, icon_url=$13`;
+      params.push(icon_url);
+    }
+    
+    query += ` WHERE id=$14 RETURNING *`;
+    params.push(req.params.id);
+    
+    const result = await pool.query(query, params);
+    res.json({ success: true, app: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// حذف تطبيق
+app.delete('/api/apps/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM apps WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// بناء تطبيق
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
@@ -99,44 +166,40 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
+    // بناء HTML مع الإضافات
     let htmlContent = appData.content;
+    
+    // إضافة رسالة ترحيب
+    if (appData.welcome_message) {
+      htmlContent = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${htmlContent}`;
+    }
+    
+    // إضافة رسالة خروج
+    if (appData.exit_message) {
+      htmlContent += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
+    }
+    
     if (appData.app_type === 'webview') {
-      htmlContent = `<!DOCTYPE html><html><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
+      htmlContent = `<!DOCTYPE html><html><head>${appData.welcome_message ? `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>` : ''}</head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe>${appData.exit_message ? `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>` : ''}</body></html>`;
     }
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
-    // نسخ الأيقونة وتحويلها لـ PNG حقيقي باستخدام base64
+    let hasIcon = false;
     if (appData.icon_url) {
       const iconPath = path.join(__dirname, appData.icon_url);
       if (fs.existsSync(iconPath)) {
-        // قراءة الملف وتحويله لـ base64 ثم كتابته كـ PNG حقيقي
-        const fileBuffer = fs.readFileSync(iconPath);
-        const base64 = fileBuffer.toString('base64');
-        // التأكد إن الملف صورة صالحة
-        const isJPEG = fileBuffer[0] === 0xFF && fileBuffer[1] === 0xD8;
-        const isPNG = fileBuffer[0] === 0x89 && fileBuffer[1] === 0x50;
-        
-        if (isPNG) {
-          fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`);
-        } else if (isJPEG) {
-          // JPG - نستخدمه مباشرة كـ jpg
-          fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.jpg`);
-        }
-        console.log('✅ Icon ready');
+        fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`);
+        hasIcon = true;
       }
     }
-    
-    const hasPng = fs.existsSync(`${appDir}/res/drawable/ic_launcher.png`);
-    const hasJpg = fs.existsSync(`${appDir}/res/drawable/ic_launcher.jpg`);
-    const iconRef = hasPng ? '@drawable/ic_launcher' : hasJpg ? '@drawable/ic_launcher' : '';
     
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="@string/app_name"${iconRef ? ` android:icon="${iconRef}"` : ''} android:usesCleartextTraffic="true">
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -151,12 +214,17 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebSettings;
 public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         WebView w = new WebView(this);
-        w.getSettings().setJavaScriptEnabled(true);
+        WebSettings s = w.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
+        s.setRenderPriority(WebSettings.RenderPriority.HIGH);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
         setContentView(w);
@@ -192,7 +260,7 @@ public class MainActivity extends Activity {
 
 app.get('/api/build-status/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT status, apk_url FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
   } catch (e) {
