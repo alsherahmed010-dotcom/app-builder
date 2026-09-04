@@ -9,8 +9,13 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// تهيئة Firebase
-const serviceAccount = require('./firebase-key.json');
+// تهيئة Firebase من متغيرات البيئة
+const serviceAccount = {
+  type: "service_account",
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY,
+  client_email: process.env.FIREBASE_CLIENT_EMAIL
+};
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 console.log('✅ Firebase initialized');
 
@@ -35,38 +40,8 @@ const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized
 
 async function initDB() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS apps (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      package_name VARCHAR(255) NOT NULL,
-      app_type VARCHAR(50) DEFAULT 'html',
-      content TEXT,
-      icon_url TEXT,
-      apk_url TEXT,
-      status VARCHAR(50) DEFAULT 'pending',
-      description TEXT,
-      fps INTEGER DEFAULT 120,
-      welcome_message TEXT,
-      exit_message TEXT,
-      notification_enabled BOOLEAN DEFAULT false,
-      admob_enabled BOOLEAN DEFAULT false,
-      admob_banner_id TEXT,
-      admob_interstitial_id TEXT,
-      version INTEGER DEFAULT 1,
-      latest_apk_url TEXT,
-      fcm_token TEXT,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    )`);
-    await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
-      id SERIAL PRIMARY KEY,
-      app_id INTEGER,
-      title VARCHAR(255),
-      message TEXT,
-      type VARCHAR(50),
-      sound VARCHAR(50),
-      created_at TIMESTAMP DEFAULT NOW()
-    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', description TEXT, fps INTEGER DEFAULT 120, welcome_message TEXT, exit_message TEXT, notification_enabled BOOLEAN DEFAULT false, admob_enabled BOOLEAN DEFAULT false, admob_banner_id TEXT, admob_interstitial_id TEXT, version INTEGER DEFAULT 1, latest_apk_url TEXT, fcm_token TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, app_id INTEGER, title VARCHAR(255), message TEXT, type VARCHAR(50), sound VARCHAR(50), created_at TIMESTAMP DEFAULT NOW())`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -84,43 +59,24 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running', firebase: 'connected' }));
 
-// إرسال إشعار FCM حقيقي
 app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message, type, sound } = req.body;
-    
     await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
     
-    const appResult = await pool.query('SELECT fcm_token, name FROM apps WHERE id = $1', [req.params.id]);
-    const appData = appResult.rows[0];
+    const appResult = await pool.query('SELECT fcm_token FROM apps WHERE id = $1', [req.params.id]);
+    const fcmToken = appResult.rows[0]?.fcm_token;
     
-    if (appData.fcm_token) {
-      const fcmMessage = {
-        token: appData.fcm_token,
-        notification: {
-          title: title,
-          body: message
-        },
-        data: {
-          type: type || 'in-app',
-          title: title,
-          message: message,
-          sound: sound || 'default'
-        },
-        android: {
-          priority: 'high',
-          notification: {
-            sound: sound === 'silent' ? null : sound === 'beep' ? 'beep' : 'default',
-            channelId: 'default'
-          }
-        }
-      };
-      
-      await admin.messaging().send(fcmMessage);
-      console.log(`📢 FCM sent to ${appData.name}`);
+    if (fcmToken) {
+      await admin.messaging().send({
+        token: fcmToken,
+        notification: { title, body: message },
+        android: { priority: 'high', notification: { sound: sound === 'silent' ? null : 'default', channelId: 'default' } }
+      });
+      console.log('📢 FCM sent');
       res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
     } else {
-      res.json({ success: true, message: '✅ تم الحفظ! (لا يوجد مستخدمين مسجلين بعد)' });
+      res.json({ success: true, message: '✅ تم الحفظ! (لا يوجد مستخدمين بعد)' });
     }
   } catch (e) {
     console.error('FCM error:', e.message);
@@ -128,11 +84,9 @@ app.post('/api/notify/:id', async (req, res) => {
   }
 });
 
-// تسجيل FCM token
 app.post('/api/register-token/:id', async (req, res) => {
   try {
-    const { token } = req.body;
-    await pool.query('UPDATE apps SET fcm_token = $1 WHERE id = $2', [token, req.params.id]);
+    await pool.query('UPDATE apps SET fcm_token = $1 WHERE id = $2', [req.body.token, req.params.id]);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -143,54 +97,14 @@ app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    
     const appData = result.rows[0];
     let content = appData.content || '';
     const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
     
-    if (appData.welcome_message) {
-      content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
-    }
+    if (appData.welcome_message) content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
+    if (appData.admob_enabled && appData.admob_banner_id) content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>`;
     
-    if (appData.admob_enabled && appData.admob_banner_id) {
-      content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>`;
-    }
-    
-    content += `
-<script>
-(function() {
-    var _appVersion = ${parseInt(appData.version) || 1};
-    var _lastNotifId = 0;
-    setInterval(function() {
-        fetch('${apiBase}/api/check-update/${req.params.id}')
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (data.version > _appVersion && data.latest_apk_url) {
-                    if (confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟')) {
-                        window.open('${apiBase}' + data.latest_apk_url, '_blank');
-                    }
-                }
-            })
-            .catch(function() {});
-    }, 30000);
-    setInterval(function() {
-        fetch('${apiBase}/api/notifications/${req.params.id}')
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (data.notifications && data.notifications.length > 0) {
-                    var last = data.notifications[0];
-                    if (last.id !== _lastNotifId) {
-                        _lastNotifId = last.id;
-                        if (${appData.notification_enabled ? 'true' : 'false'}) {
-                            alert('📢 ' + last.title + '\\n\\n' + last.message);
-                        }
-                    }
-                }
-            })
-            .catch(function() {});
-    }, 10000);
-})();
-</script>`;
+    content += `<script>(function(){var v=${parseInt(appData.version)||1},n=0;setInterval(function(){fetch('${apiBase}/api/check-update/${req.params.id}').then(r=>r.json()).then(d=>{if(d.version>v&&d.latest_apk_url){if(confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟'))window.open('${apiBase}'+d.latest_apk_url,'_blank')}}).catch(()=>{})},30000);setInterval(function(){fetch('${apiBase}/api/notifications/${req.params.id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;if(${appData.notification_enabled?'true':'false'})alert('📢 '+l.title+'\\n\\n'+l.message)}}}).catch(()=>{})},10000)})();</script>`;
     
     res.send(content);
   } catch (e) {
@@ -202,43 +116,30 @@ app.get('/api/check-update/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
     res.json({ success: true, version: result.rows[0].version, latest_apk_url: result.rows[0].latest_apk_url });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/notifications/:appId', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.appId]);
     res.json({ success: true, notifications: result.rows });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    
-    const result = await pool.query(
-      `INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) 
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [name, package_name, app_type, content, icon_url, description, parseInt(fps) || 120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]
-    );
+    const result = await pool.query(`INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, [name, package_name, app_type, content, icon_url, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]);
     res.json({ success: true, app: result.rows[0] });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/apps', async (req, res) => {
   try {
     const result = await pool.query('SELECT DISTINCT ON (package_name) * FROM apps ORDER BY package_name, created_at DESC');
     res.json({ success: true, apps: result.rows });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/apps/:id', async (req, res) => {
@@ -246,9 +147,7 @@ app.get('/api/apps/:id', async (req, res) => {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, app: result.rows[0] });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
@@ -256,69 +155,30 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     const id = parseInt(req.params.id);
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    
-    await pool.query(
-      `UPDATE apps SET 
-        name = COALESCE($1, name),
-        package_name = COALESCE($2, package_name),
-        app_type = COALESCE($3, app_type),
-        content = COALESCE($4, content),
-        description = COALESCE($5, description),
-        fps = COALESCE($6, fps),
-        welcome_message = COALESCE($7, welcome_message),
-        exit_message = COALESCE($8, exit_message),
-        notification_enabled = COALESCE($9, notification_enabled),
-        admob_enabled = COALESCE($10, admob_enabled),
-        admob_banner_id = COALESCE($11, admob_banner_id),
-        admob_interstitial_id = COALESCE($12, admob_interstitial_id),
-        version = version + 1,
-        updated_at = NOW()
-      WHERE id = $13`,
-      [name, package_name, app_type, content, description, parseInt(fps) || 120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, id]
-    );
-    
-    if (icon_url) await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2', [icon_url, id]);
+    await pool.query(`UPDATE apps SET name=COALESCE($1,name), package_name=COALESCE($2,package_name), app_type=COALESCE($3,app_type), content=COALESCE($4,content), description=COALESCE($5,description), fps=COALESCE($6,fps), welcome_message=COALESCE($7,welcome_message), exit_message=COALESCE($8,exit_message), notification_enabled=COALESCE($9,notification_enabled), admob_enabled=COALESCE($10,admob_enabled), admob_banner_id=COALESCE($11,admob_banner_id), admob_interstitial_id=COALESCE($12,admob_interstitial_id), version=version+1, updated_at=NOW() WHERE id=$13`, [name, package_name, app_type, content, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, id]);
+    if (icon_url) await pool.query('UPDATE apps SET icon_url=$1 WHERE id=$2', [icon_url, id]);
     res.json({ success: true, message: '✅ تم الحفظ!' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/apps/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM apps WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  try { await pool.query('DELETE FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
-  
   try {
     await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['building', id]);
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
+    const result = await pool.query('SELECT * FROM apps WHERE id=$1', [id]);
     const appData = result.rows[0];
-    
     const safeName = (appData.package_name || 'com.app.app').replace(/[^a-z0-9.]/g, '');
     const appDir = path.join(__dirname, 'builds', String(id));
-    
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    const liveHtml = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin:0;padding:0;">
-    <iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe>
-</body>
-</html>`;
+    const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
     
     fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">App</string></resources>`);
@@ -326,10 +186,7 @@ app.post('/api/build/:id', async (req, res) => {
     let hasIcon = false;
     if (appData.icon_url) {
       const iconPath = path.join(__dirname, appData.icon_url);
-      if (fs.existsSync(iconPath)) {
-        fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`);
-        hasIcon = true;
-      }
+      if (fs.existsSync(iconPath)) { fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`); hasIcon = true; }
     }
     
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
@@ -387,19 +244,14 @@ public class MainActivity extends Activity {
         console.log(`✅ Build completed: ${apkUrl}`);
       }
     });
-  } catch (e) {
-    console.error('Error:', e.message);
-    await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
-  }
+  } catch (e) { console.error('Error:', e.message); await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]); }
 });
 
 app.get('/api/build-status/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id=$1', [req.params.id]);
     res.json({ success: true, ...result.rows[0] });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const PORT = process.env.PORT || 8080;
