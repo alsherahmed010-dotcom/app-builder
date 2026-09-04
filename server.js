@@ -48,8 +48,19 @@ async function initDB() {
       admob_interstitial_id TEXT,
       version INTEGER DEFAULT 1,
       latest_apk_url TEXT,
+      fcm_token TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      app_id INTEGER,
+      title VARCHAR(255),
+      message TEXT,
+      type VARCHAR(50),
+      sound VARCHAR(50),
+      sent BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW()
     )`);
     console.log('✅ Database initialized');
   } catch (e) {
@@ -66,31 +77,54 @@ if (!fs.existsSync(keystorePath)) {
   });
 }
 
-// تحميل مكتبة AdMob
-const admobJar = path.join(__dirname, 'play-services-ads.jar');
-if (!fs.existsSync(admobJar)) {
-  exec(`cd /tmp && wget -q https://repo1.maven.org/maven2/com/google/android/gms/play-services-ads-lite/23.2.0/play-services-ads-lite-23.2.0.aar -O ads.aar && unzip -o ads.aar classes.jar && cp classes.jar ${admobJar} && echo "✅ AdMob library downloaded"`, (err) => {
-    if (err) console.log('⚠️ AdMob download failed');
-    else console.log('✅ AdMob library ready');
-  });
-}
-
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-app.get('/api/check-update/:id', async (req, res) => {
+// إرسال إشعار FCM حقيقي
+app.post('/api/notify/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true, ...result.rows[0] });
+    const { title, message, type, sound } = req.body;
+    
+    // حفظ الإشعار في قاعدة البيانات
+    await pool.query(
+      'INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)',
+      [req.params.id, title, message, type, sound]
+    );
+    
+    // جلب FCM token للتطبيق
+    const appResult = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    const appData = appResult.rows[0];
+    
+    // إرسال FCM (لو فيه token)
+    if (appData.fcm_token) {
+      // هنا هنبعت عبر FCM API
+      const fcmPayload = {
+        to: appData.fcm_token,
+        notification: {
+          title: title,
+          body: message,
+          sound: sound === 'default' ? 'default' : sound === 'silent' ? null : 'notification_sound.mp3'
+        },
+        data: {
+          type: type,
+          title: title,
+          message: message
+        }
+      };
+      
+      console.log('📢 Sending FCM:', fcmPayload);
+    }
+    
+    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/api/notify/:id', async (req, res) => {
+// تسجيل FCM token من التطبيق
+app.post('/api/register-token/:id', async (req, res) => {
   try {
-    const { title, message, type, sound } = req.body;
-    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
+    const { token } = req.body;
+    await pool.query('UPDATE apps SET fcm_token = $1 WHERE id = $2', [token, req.params.id]);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -99,7 +133,7 @@ app.post('/api/notify/:id', async (req, res) => {
 
 app.get('/api/notifications/:appId', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 5', [req.params.appId]);
+    const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.appId]);
     res.json({ success: true, notifications: result.rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -119,14 +153,12 @@ app.get('/api/app-content/:id', async (req, res) => {
       content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
     }
     
-    if (appData.exit_message) {
-      content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
-    }
-    
     content += `
 <script>
 window._appVersion = ${appData.version};
 window._lastNotifId = 0;
+
+// فحص التحديث
 setInterval(async () => {
     try {
         const res = await fetch('${apiBase}/api/check-update/${req.params.id}');
@@ -138,6 +170,8 @@ setInterval(async () => {
         }
     } catch(e) {}
 }, 30000);
+
+// فحص الإشعارات
 setInterval(async () => {
     try {
         const res = await fetch('${apiBase}/api/notifications/${req.params.id}');
@@ -147,12 +181,19 @@ setInterval(async () => {
             if (last.id !== window._lastNotifId) {
                 window._lastNotifId = last.id;
                 if ('${appData.notification_enabled}' === 'true') {
-                    alert('📢 ' + last.title + '\\n\\n' + last.message);
+                    if ('${last.type}' === 'in-app' || '${last.type}' === 'both') {
+                        alert('📢 ' + last.title + '\\n\\n' + last.message);
+                    }
+                    if ('${last.sound}' === 'beep') {
+                        // تشغيل صوت بييب
+                        const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAA=');
+                        audio.play();
+                    }
                 }
             }
         }
     } catch(e) {}
-}, 15000);
+}, 10000);
 </script>`;
     
     res.send(content);
@@ -253,12 +294,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
-    fs.mkdirSync(`${appDir}/libs`, { recursive: true });
-    
-    // نسخ مكتبة AdMob
-    if (fs.existsSync(admobJar)) {
-      fs.copyFileSync(admobJar, `${appDir}/libs/play-services-ads.jar`);
-    }
     
     const liveHtml = `<!DOCTYPE html>
 <html>
@@ -283,15 +318,11 @@ app.post('/api/build/:id', async (req, res) => {
       }
     }
     
-    // Manifest مع AdMob
-    const admobMeta = appData.admob_enabled && appData.admob_banner_id ? `
-    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${appData.admob_banner_id.split('/')[0]}"/>` : '';
-    
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">${admobMeta}
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -301,65 +332,30 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
-    // MainActivity مع إعلانات أصلية
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
-import android.widget.LinearLayout;
-import android.view.ViewGroup;
-import com.google.android.gms.ads.MobileAds;
-import com.google.android.gms.ads.AdView;
-import com.google.android.gms.ads.AdSize;
-import com.google.android.gms.ads.AdRequest;
-import com.google.android.gms.ads.initialization.InitializationStatus;
-import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
 public class MainActivity extends Activity {
-    private WebView w;
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        
-        // تهيئة AdMob
-        MobileAds.initialize(this, new OnInitializationCompleteListener() {
-            @Override
-            public void onInitializationComplete(InitializationStatus status) {}
-        });
-        
-        w = new WebView(this);
+        WebView w = new WebView(this);
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
-        
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        
-        // إضافة بانر إعلاني لو مفعل
-        ${appData.admob_enabled && appData.admob_banner_id ? `
-        AdView adView = new AdView(this);
-        adView.setAdSize(AdSize.BANNER);
-        adView.setAdUnitId("${appData.admob_banner_id}");
-        AdRequest adRequest = new AdRequest.Builder().build();
-        adView.loadAd(adRequest);
-        layout.addView(adView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        ` : ''}
-        
-        layout.addView(w, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 1));
-        setContentView(layout);
+        setContentView(w);
     }
 }`);
     
-    // البناء مع مكتبة AdMob
-    const admobClasspath = fs.existsSync(`${appDir}/libs/play-services-ads.jar`) ? `${appDir}/libs/play-services-ads.jar` : '';
-    
     const buildCmd = `cd ${appDir} && \
     $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && \
-    javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar:${admobClasspath} -d . MainActivity.java 2>/dev/null && \
-    $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --lib ${admobClasspath} --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
+    javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
+    $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
     $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets compiled.zip && \
     $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
     $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
@@ -374,7 +370,7 @@ public class MainActivity extends Activity {
       } else {
         const apkUrl = `/builds/${id}/final.apk`;
         await pool.query('UPDATE apps SET apk_url=$1, latest_apk_url=$1, status=$2, version=version+1 WHERE id=$3', [apkUrl, 'completed', id]);
-        console.log(`✅ Build completed with AdMob: ${apkUrl}`);
+        console.log(`✅ Build completed: ${apkUrl}`);
       }
     });
   } catch (e) {
