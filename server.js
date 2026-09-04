@@ -8,11 +8,22 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-const upload = multer({ dest: 'uploads/' });
+// إعداد multer لحفظ الأيقونات
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'uploads');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname.replace(/[^a-zA-Z0-9.]/g, '_'));
+  }
+});
+const upload = multer({ storage });
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/builds', express.static('builds'));
 app.use('/uploads', express.static('uploads'));
@@ -49,12 +60,18 @@ app.get('/', (req, res) => {
 
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
+    console.log('📥 Received:', req.body);
+    console.log('📸 File:', req.file);
+    
     const { name, package_name, app_type, content } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
+    
     const result = await pool.query(
       'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [name, package_name, app_type, content, icon_url]
     );
+    
+    console.log('✅ App created with icon:', icon_url);
     res.json({ success: true, app: result.rows[0] });
   } catch (e) {
     console.error('Create error:', e.message);
@@ -115,11 +132,20 @@ app.post('/api/build/:id', async (req, res) => {
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     
+    // إضافة الأيقونة لو موجودة
+    if (appData.icon_url) {
+      const iconPath = path.join(__dirname, appData.icon_url);
+      if (fs.existsSync(iconPath)) {
+        fs.mkdirSync(`${appDir}/res/mipmap`, { recursive: true });
+        fs.copyFileSync(iconPath, `${appDir}/res/mipmap/ic_launcher.png`);
+      }
+    }
+    
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="${appData.name}" android:usesCleartextTraffic="true">
+    <application android:label="${appData.name}" android:icon="@mipmap/ic_launcher" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -149,7 +175,7 @@ public class MainActivity extends Activity {
     const buildCmd = `cd ${appDir} && \
     javac -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java && \
     $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
-    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets && \
+    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets -R res && \
     $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
     $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
     keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true && \
