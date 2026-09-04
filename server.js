@@ -40,7 +40,7 @@ async function initDB() {
     await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', description TEXT, fps INTEGER DEFAULT 120, welcome_message TEXT, exit_message TEXT, notification_enabled BOOLEAN DEFAULT false, admob_enabled BOOLEAN DEFAULT false, admob_banner_id TEXT, admob_interstitial_id TEXT, version INTEGER DEFAULT 1, latest_apk_url TEXT, fcm_token TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
     await pool.query(`CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, app_id INTEGER, title VARCHAR(255), message TEXT, type VARCHAR(50), sound VARCHAR(50), created_at TIMESTAMP DEFAULT NOW())`);
     console.log('✅ DB');
-  } catch (e) {}
+  } catch (e) { console.error('DB:', e.message); }
 }
 initDB();
 
@@ -51,7 +51,7 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// محتوى التطبيق مع إشعارات HTML فورية
+// محتوى التطبيق مع التحديث اللحظي للمحتوى + فحص الإصدار
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
@@ -59,30 +59,54 @@ app.get('/api/app-content/:id', async (req, res) => {
     const appData = r.rows[0];
     let content = appData.content || '';
     const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
-    
+
+    if (appData.app_type === 'webview' && appData.content) {
+      content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
+    }
     if (!content.includes('<!DOCTYPE') && !content.includes('<html')) {
       content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${content}</body></html>`;
     }
-    
-    // إشعارات HTML فورية - بتفحص كل 3 ثواني
+
+    // سكربت فحص الإصدار والإشعارات
     content += `
 <script>
 (function() {
-    var _lastNotifId = 0;
-    var _appVersion = ${parseInt(appData.version)||1};
-    
+    var currentVersion = ${parseInt(appData.version) || 1};
+    var lastNotifId = 0;
+    var updateShown = false;
+
+    function checkForUpdate() {
+        fetch('${apiBase}/api/check-update/${req.params.id}')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.version > currentVersion && !updateShown && d.latest_apk_url) {
+                    updateShown = true;
+                    var overlay = document.createElement('div');
+                    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
+                    overlay.innerHTML = '<div style="background:#fff;border-radius:15px;padding:25px;text-align:center;max-width:300px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.5);">' +
+                        '<div style="font-size:40px;">🔄</div>' +
+                        '<h3 style="margin:10px 0;color:#333;">يوجد إصدار جديد!</h3>' +
+                        '<p style="color:#666;font-size:13px;margin-bottom:15px;">تم تحديث الاسم أو الأيقونة.<br>يرجى تحميل النسخة الأحدث.</p>' +
+                        '<a href="${apiBase}' + d.latest_apk_url + '" style="display:inline-block;padding:12px 30px;background:#667eea;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">⬇️ تحديث الآن</a>' +
+                        '<br><button onclick="this.parentElement.parentElement.remove()" style="margin-top:10px;background:none;border:none;color:#999;font-size:12px;cursor:pointer;">لاحقًا</button>' +
+                        '</div>';
+                    document.body.appendChild(overlay);
+                }
+            })
+            .catch(function() {});
+    }
+
     function checkNotifications() {
         fetch('${apiBase}/api/notifications/${req.params.id}')
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d.notifications && d.notifications.length > 0) {
                     var last = d.notifications[0];
-                    if (last.id !== _lastNotifId) {
-                        _lastNotifId = last.id;
-                        // إظهار إشعار HTML جميل
+                    if (last.id !== lastNotifId) {
+                        lastNotifId = last.id;
                         var notif = document.createElement('div');
-                        notif.style.cssText = 'position:fixed;top:10px;right:10px;left:10px;background:#333;color:#fff;padding:15px;border-radius:12px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,0.5);animation:slideDown 0.5s;';
-                        notif.innerHTML = '<strong style="font-size:15px;">📢 ' + last.title + '</strong><br><span style="font-size:13px;">' + last.message + '</span><br><button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 15px;background:#667eea;color:#fff;border:none;border-radius:6px;font-size:11px;">حسناً</button>';
+                        notif.style.cssText = 'position:fixed;top:10px;right:10px;left:10px;background:#333;color:#fff;padding:15px;border-radius:12px;z-index:99998;';
+                        notif.innerHTML = '<strong>📢 ' + last.title + '</strong><br><span style="font-size:13px;">' + last.message + '</span><br><button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 15px;background:#667eea;color:#fff;border:none;border-radius:6px;font-size:11px;">حسناً</button>';
                         document.body.appendChild(notif);
                         setTimeout(function() { if (notif.parentElement) notif.remove(); }, 10000);
                     }
@@ -90,31 +114,14 @@ app.get('/api/app-content/:id', async (req, res) => {
             })
             .catch(function() {});
     }
-    
-    function checkUpdate() {
-        fetch('${apiBase}/api/check-update/${req.params.id}')
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.version > _appVersion && d.latest_apk_url) {
-                    if (confirm('🔄 يوجد تحديث جديد!')) {
-                        window.open('${apiBase}' + d.latest_apk_url, '_blank');
-                    }
-                }
-            })
-            .catch(function() {});
-    }
-    
+
+    checkForUpdate();
     checkNotifications();
-    checkUpdate();
+    setInterval(checkForUpdate, 5000);
     setInterval(checkNotifications, 3000);
-    setInterval(checkUpdate, 30000);
-    
-    var style = document.createElement('style');
-    style.textContent = '@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';
-    document.head.appendChild(style);
 })();
 </script>`;
-    
+
     res.send(content);
   } catch (e) { res.status(500).send('Error'); }
 });
@@ -123,8 +130,8 @@ app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message, type, sound } = req.body;
     await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
-    console.log(`📢 Notification saved for app ${req.params.id}: ${title}`);
-    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
+    console.log(`📢 Notification for app ${req.params.id}: ${title}`);
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -133,14 +140,21 @@ app.get('/api/notifications/:appId', async (req, res) => {
 });
 
 app.get('/api/check-update/:id', async (req, res) => {
-  try { const r = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true, ...r.rows[0] }); } catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const r = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id=$1', [req.params.id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, version: r.rows[0].version, latest_apk_url: r.rows[0].latest_apk_url });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    const r = await pool.query(`INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, [name, package_name, app_type, content, icon_url, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]);
+    const r = await pool.query(
+      `INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [name, package_name, app_type, content, icon_url, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]
+    );
     res.json({ success: true, app: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -153,21 +167,59 @@ app.get('/api/apps/:id', async (req, res) => {
   try { const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]); if (r.rows.length===0) return res.status(404).json({error:'Not found'}); res.json({success:true, app:r.rows[0]}); } catch (e) { res.status(500).json({error:e.message}); }
 });
 
+// تعديل التطبيق: نزيد الإصدار فقط إذا تغير الاسم أو الأيقونة أو الباكدج
 app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const old = await pool.query('SELECT * FROM apps WHERE id=$1', [id]);
+    if (old.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    const oldData = old.rows[0];
+
     const { name, package_name, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    await pool.query(`UPDATE apps SET name=COALESCE($1,name), package_name=COALESCE($2,package_name), content=COALESCE($3,content), description=COALESCE($4,description), fps=COALESCE($5,fps), welcome_message=COALESCE($6,welcome_message), exit_message=COALESCE($7,exit_message), notification_enabled=COALESCE($8,notification_enabled), admob_enabled=COALESCE($9,admob_enabled), admob_banner_id=COALESCE($10,admob_banner_id), admob_interstitial_id=COALESCE($11,admob_interstitial_id), version=version+1 WHERE id=$12`, [name, package_name, content, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, id]);
-    if (icon_url) await pool.query('UPDATE apps SET icon_url=$1 WHERE id=$2', [icon_url, id]);
-    res.json({ success: true, message: '✅ تم الحفظ!' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+
+    // تحديد ما إذا كان هناك تغيير يتطلب إصدارًا جديدًا
+    const nameChanged = name && name !== oldData.name;
+    const packageChanged = package_name && package_name !== oldData.package_name;
+    const iconChanged = !!icon_url;
+    const needsNewVersion = nameChanged || packageChanged || iconChanged;
+
+    const newVersion = needsNewVersion ? oldData.version + 1 : oldData.version;
+
+    await pool.query(
+      `UPDATE apps SET 
+        name = COALESCE($1, name),
+        package_name = COALESCE($2, package_name),
+        content = COALESCE($3, content),
+        description = COALESCE($4, description),
+        fps = COALESCE($5, fps),
+        welcome_message = COALESCE($6, welcome_message),
+        exit_message = COALESCE($7, exit_message),
+        notification_enabled = COALESCE($8, notification_enabled),
+        admob_enabled = COALESCE($9, admob_enabled),
+        admob_banner_id = COALESCE($10, admob_banner_id),
+        admob_interstitial_id = COALESCE($11, admob_interstitial_id),
+        version = $12,
+        updated_at = NOW()
+      WHERE id = $13`,
+      [name, package_name, content, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, newVersion, id]
+    );
+
+    if (icon_url) {
+      await pool.query('UPDATE apps SET icon_url=$1 WHERE id=$2', [icon_url, id]);
+    }
+
+    res.json({ success: true, message: needsNewVersion ? '✅ تم الحفظ! سيظهر إشعار تحديث للمستخدمين.' : '✅ تم الحفظ! المحتوى اتحدث لحظياً.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.delete('/api/apps/:id', async (req, res) => {
   try { await pool.query('DELETE FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// بناء APK مع المحتوى اللحظي
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
@@ -180,25 +232,18 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
-    
-    let htmlContent = appData.content || '';
-    if (appData.app_type === 'webview' && appData.content) {
-      htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
-    }
-    if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
-      htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${htmlContent}</body></html>`;
-    }
-    
-    // إشعارات HTML في المحتوى
-    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
-    htmlContent += `<script>(function(){var n=0;setInterval(function(){fetch('${apiBase}/api/notifications/${id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;var el=document.createElement('div');el.style.cssText='position:fixed;top:10px;right:10px;left:10px;background:#333;color:#fff;padding:15px;border-radius:12px;z-index:99999;';el.innerHTML='<strong>📢 '+l.title+'</strong><br>'+l.message+'<br><button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 15px;background:#667eea;color:#fff;border:none;border-radius:6px;">حسناً</button>';document.body.appendChild(el);setTimeout(function(){if(el.parentElement)el.remove()},10000)}}}).catch(()=>{})},3000)})();</script>`;
-    
-    fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
+
+    // المحتوى الرئيسي داخل APK هو iframe يشير إلى السيرفر، ليحدث دائماً
+    const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
+    fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
-    
+
     let hasIcon = false;
-    if (appData.icon_url) { const p = path.join(__dirname, appData.icon_url); if (fs.existsSync(p)) { fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`); hasIcon = true; } }
-    
+    if (appData.icon_url) {
+      const p = path.join(__dirname, appData.icon_url);
+      if (fs.existsSync(p)) { fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`); hasIcon = true; }
+    }
+
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
@@ -212,7 +257,7 @@ app.post('/api/build/:id', async (req, res) => {
         </activity>
     </application>
 </manifest>`);
-    
+
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
@@ -227,13 +272,12 @@ public class MainActivity extends Activity {
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
         setContentView(w);
     }
 }`);
-    
+
     const buildCmd = `cd ${appDir} && \
     $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && \
     javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
@@ -244,16 +288,28 @@ public class MainActivity extends Activity {
     cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null; \
     $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android app-final.apk && \
     cp app-final.apk final.apk`;
-    
+
     exec(buildCmd, { timeout: 180000 }, async (err, stdout, stderr) => {
-      if (err) { console.error('Build:', stderr || err.message); await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]); }
-      else { const u = `/builds/${id}/final.apk`; await pool.query('UPDATE apps SET apk_url=$1, latest_apk_url=$1, status=$2, version=version+1 WHERE id=$3', [u, 'completed', id]); console.log(`✅ Build: ${u}`); }
+      if (err) {
+        console.error('Build:', stderr || err.message);
+        await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
+      } else {
+        const u = `/builds/${id}/final.apk`;
+        await pool.query('UPDATE apps SET apk_url=$1, latest_apk_url=$1, status=$2 WHERE id=$3', [u, 'completed', id]);
+        console.log(`✅ Build: ${u}`);
+      }
     });
-  } catch (e) { console.error('Error:', e.message); await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]); }
+  } catch (e) {
+    console.error('Error:', e.message);
+    await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
+  }
 });
 
 app.get('/api/build-status/:id', async (req, res) => {
-  try { const r = await pool.query('SELECT status, apk_url, version FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true, ...r.rows[0] }); } catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const r = await pool.query('SELECT status, apk_url, version FROM apps WHERE id=$1', [req.params.id]);
+    res.json({ success: true, ...r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const PORT = process.env.PORT || 8080;
