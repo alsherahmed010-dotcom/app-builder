@@ -2,7 +2,6 @@ const express = require('express');
 const { exec } = require('child_process');
 const { Pool } = require('pg');
 const multer = require('multer');
-const sharp = require('sharp');
 const app = express();
 const cors = require('cors');
 const fs = require('fs');
@@ -56,18 +55,10 @@ app.get('/api/app-content/:id', async (req, res) => {
   try { const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]); if (r.rows.length === 0) return res.status(404).send('Not found'); res.send(r.rows[0].content || '<h1>Empty</h1>'); } catch (e) { res.status(500).send('Error'); }
 });
 
-// رفع الأيقونة مع تحويل تلقائي لـ PNG
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
-    let icon_url = null;
-    if (req.file) {
-      const originalPath = req.file.path;
-      const pngPath = originalPath.replace(/\.[^.]+$/, '.png');
-      await sharp(originalPath).resize(512, 512).png().toFile(pngPath);
-      fs.unlinkSync(originalPath);
-      icon_url = `/uploads/${path.basename(pngPath)}`;
-    }
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
+    const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     const r = await pool.query(`INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, [name, package_name, app_type, content, icon_url, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]);
     res.json({ success: true, app: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -87,15 +78,8 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     const old = await pool.query('SELECT * FROM apps WHERE id=$1', [id]);
     if (old.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     const oldData = old.rows[0];
-    let icon_url = null;
-    if (req.file) {
-      const originalPath = req.file.path;
-      const pngPath = originalPath.replace(/\.[^.]+$/, '.png');
-      await sharp(originalPath).resize(512, 512).png().toFile(pngPath);
-      fs.unlinkSync(originalPath);
-      icon_url = `/uploads/${path.basename(pngPath)}`;
-    }
     const { name, package_name, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
+    const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     const nameChanged = name && name !== oldData.name;
     const iconChanged = !!icon_url;
     const needsNewVersion = nameChanged || iconChanged;
@@ -133,13 +117,16 @@ app.post('/api/build/:id', async (req, res) => {
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
 
-    // الأيقونة PNG مضمونة لأننا حولناها بـ sharp
+    // فحص PNG signature
     let hasIcon = false;
     if (appData.icon_url) {
       const p = path.join(__dirname, appData.icon_url);
       if (fs.existsSync(p)) {
-        fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`);
-        hasIcon = true;
+        const buffer = fs.readFileSync(p);
+        if (buffer.length > 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+          fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`);
+          hasIcon = true;
+        }
       }
     }
 
