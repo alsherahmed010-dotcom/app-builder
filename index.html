@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم - صانع التطبيقات</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            padding: 25px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            margin-bottom: 25px;
+        }
+        .header h1 {
+            font-size: 26px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .create-btn {
+            width: 100%;
+            padding: 18px;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 900;
+            font-size: 18px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            margin-bottom: 25px;
+        }
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .app-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .app-card:hover {
+            background: rgba(102,126,234,0.1);
+            transform: translateY(-5px);
+        }
+        .app-card img {
+            width: 60px;
+            height: 60px;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            object-fit: cover;
+        }
+        .app-card h3 { font-size: 14px; margin-bottom: 5px; }
+        .app-card .actions { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+        .app-card .actions button {
+            padding: 5px 10px;
+            font-family: 'Cairo', sans-serif;
+            font-size: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .download-btn { background: #00ff00; color: #000; }
+        .edit-btn { background: #667eea; color: #fff; }
+        .delete-btn { background: #ff0000; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 لوحة التحكم</h1>
+            <p>إدارة تطبيقاتك</p>
+        </div>
+        <button class="create-btn" onclick="location.href='create.html'">➕ إنشاء تطبيق جديد</button>
+        <div class="apps-grid" id="appsGrid"></div>
+    </div>
+    <script>
+        firebase.initializeApp({
+            apiKey: "AIzaSyBu-9Z0T-OHPzauWXh8hmNSMDZKhAFnkf0",
+            projectId: "game-a1aca",
+            storageBucket: "game-a1aca.firebasestorage.app",
+            appId: "1:598280425947:android:0e4ead8d9b50cfc92157fe"
+        });
+        const db = firebase.firestore();
+        
+        async function loadApps() {
+            const grid = document.getElementById('appsGrid');
+            grid.innerHTML = '<p style="text-align:center;color:#666;">⏳ جاري التحميل...</p>';
+            
+            try {
+                const snapshot = await db.collection('my_apps').get();
+                const apps = [];
+                snapshot.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
+                
+                if (apps.length === 0) {
+                    grid.innerHTML = '<p style="text-align:center;color:#666;">لا توجد تطبيقات</p>';
+                    return;
+                }
+                
+                grid.innerHTML = '';
+                apps.forEach(app => {
+                    const card = document.createElement('div');
+                    card.className = 'app-card';
+                    card.innerHTML = `
+                        <img src="${app.icon || 'https://via.placeholder.com/60'}" alt="${app.name}">
+                        <h3>${app.name}</h3>
+                        <p style="font-size:10px;color:#888;">${app.fps} FPS</p>
+                        <div class="actions">
+                            <button class="download-btn" onclick="downloadApp('${app.id}')">⬇️ تحميل</button>
+                            <button class="edit-btn" onclick="editApp('${app.id}')">✏️ تعديل</button>
+                            <button class="delete-btn" onclick="deleteApp('${app.id}')">🗑️</button>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch(e) {
+                grid.innerHTML = '<p style="color:#ff0000;">خطأ: ' + e.message + '</p>';
+            }
+        }
+        
+        async function deleteApp(id) {
+            if (confirm('حذف التطبيق؟')) {
+                await db.collection('my_apps').doc(id).delete();
+                loadApps();
+            }
+        }
+        
+        function editApp(id) {
+            localStorage.setItem('edit_id', id);
+            location.href = 'settings.html';
+        }
+        
+        function downloadApp(id) {
+            alert('جاري تجهيز التحميل...');
+        }
+        
+        loadApps();
+    </script>
+</body>
+</html>

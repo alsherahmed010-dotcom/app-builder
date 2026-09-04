@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعدادات التطبيق</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 500px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        .header h1 { font-size: 24px; color: #667eea; }
+        .input-group { margin-bottom: 20px; }
+        .input-group label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #ddd;
+        }
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 14px;
+            font-family: 'Cairo', sans-serif;
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-family: 'Cairo', sans-serif;
+            font-weight: 900;
+            font-size: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ إعدادات التطبيق</h1>
+        </div>
+        <div class="input-group">
+            <label>📱 اسم التطبيق:</label>
+            <input type="text" id="appName" placeholder="اكتب اسم التطبيق">
+        </div>
+        <div class="input-group">
+            <label>🖼️ صورة التطبيق (URL):</label>
+            <input type="text" id="appIcon" placeholder="https://...">
+        </div>
+        <div class="input-group">
+            <label>🎮 عدد الفريمات (FPS):</label>
+            <select id="fps">
+                <option value="60">60 FPS</option>
+                <option value="90">90 FPS</option>
+                <option value="120">120 FPS</option>
+                <option value="144">144 FPS</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>📝 كود HTML:</label>
+            <textarea id="htmlCode" rows="8" style="width:100%;padding:14px;font-family:monospace;background:rgba(255,255,255,0.05);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:10px;" placeholder="الصق كود HTML هنا..."></textarea>
+        </div>
+        <button class="btn" onclick="buildApp()">🚀 إنشاء التطبيق</button>
+    </div>
+    <script>
+        function buildApp() {
+            const name = document.getElementById('appName').value;
+            const icon = document.getElementById('appIcon').value;
+            const fps = document.getElementById('fps').value;
+            const html = document.getElementById('htmlCode').value;
+            
+            if (!name || !html) {
+                alert('اكتب اسم التطبيق وكود HTML');
+                return;
+            }
+            
+            const app = {
+                name: name,
+                icon: icon,
+                fps: fps,
+                html: html,
+                created: new Date().toISOString()
+            };
+            
+            let apps = JSON.parse(localStorage.getItem('apps') || '[]');
+            apps.push(app);
+            localStorage.setItem('apps', JSON.stringify(apps));
+            
+            alert('✅ تم إنشاء التطبيق!');
+            location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
