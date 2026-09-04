@@ -61,16 +61,23 @@ class BuildService {
 
   async buildAPK(buildDir, buildId) {
     return new Promise((resolve, reject) => {
+      // إضافة إعدادات ذاكرة أقل لـ Gradle
+      const gradleProps = path.join(buildDir, 'android', 'gradle.properties');
+      
       const command = `
         cd ${buildDir} && 
         npm install --silent &&
         npx cap add android &&
         npx cap sync android &&
         cd android && 
-        gradle assembleDebug --no-daemon
+        echo "org.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=256m" >> gradle.properties &&
+        echo "org.gradle.daemon=false" >> gradle.properties &&
+        echo "org.gradle.parallel=false" >> gradle.properties &&
+        echo "android.enableJetifier=false" >> gradle.properties &&
+        gradle assembleDebug --no-daemon --offline 2>/dev/null || gradle assembleDebug --no-daemon
       `;
       
-      exec(command, { timeout: 600000 }, (error, stdout, stderr) => {
+      exec(command, { timeout: 900000, maxBuffer: 10*1024*1024 }, (error, stdout, stderr) => {
         if (error) {
           reject(error);
         } else {
