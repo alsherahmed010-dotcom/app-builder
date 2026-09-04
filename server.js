@@ -77,31 +77,37 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// إرسال إشعار
-app.post('/api/notify/:id', async (req, res) => {
+// فحص التحديث
+app.get('/api/check-update/:id', async (req, res) => {
   try {
-    const { title, message, type, sound } = req.body;
-    await pool.query(
-      'INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)',
-      [req.params.id, title, message, type, sound]
-    );
-    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
+    const result = await pool.query('SELECT version, latest_apk_url, name FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, version: result.rows[0].version, latest_apk_url: result.rows[0].latest_apk_url });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// جلب الإشعارات للتطبيق
+app.post('/api/notify/:id', async (req, res) => {
+  try {
+    const { title, message, type, sound } = req.body;
+    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/notifications/:appId', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.appId]);
+    const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 5', [req.params.appId]);
     res.json({ success: true, notifications: result.rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// محتوى التطبيق مع الإشعارات
+// محتوى التطبيق مع فحص التحديث والإشعارات
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -109,6 +115,8 @@ app.get('/api/app-content/:id', async (req, res) => {
     
     const appData = result.rows[0];
     let content = appData.content;
+    const currentVersion = appData.version;
+    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
     
     if (appData.welcome_message) {
       content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
@@ -118,27 +126,41 @@ app.get('/api/app-content/:id', async (req, res) => {
       content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
     }
     
-    // إضافة فحص الإشعارات
+    // فحص التحديث + الإشعارات
     content += `
 <script>
+window._appVersion = ${currentVersion};
+window._lastNotifId = 0;
+
+// فحص التحديث كل 30 ثانية
 setInterval(async () => {
     try {
-        const res = await fetch('${req.protocol}://${req.get('host')}/api/notifications/${req.params.id}');
+        const res = await fetch('${apiBase}/api/check-update/${req.params.id}');
         const data = await res.json();
-        if (data.notifications.length > 0) {
-            const lastNotif = data.notifications[0];
-            if (lastNotif.id !== window._lastNotifId) {
-                window._lastNotifId = lastNotif.id;
-                ${appData.notification_enabled ? `
-                if ('${lastNotif.type}' === 'in-app' || '${lastNotif.type}' === 'both') {
-                    alert('${lastNotif.title}\\n${lastNotif.message}');
-                }
-                if ('${lastNotif.sound}' === 'beep') { /* تشغيل صوت */ }
-                ` : ''}
+        if (data.version > window._appVersion && data.latest_apk_url) {
+            if (confirm('🔄 يوجد تحديث جديد!\\n\\nهل تريد تحميل النسخة الأحدث؟')) {
+                window.open('${apiBase}' + data.latest_apk_url, '_blank');
             }
         }
     } catch(e) {}
 }, 30000);
+
+// فحص الإشعارات كل 15 ثانية
+setInterval(async () => {
+    try {
+        const res = await fetch('${apiBase}/api/notifications/${req.params.id}');
+        const data = await res.json();
+        if (data.notifications.length > 0) {
+            const last = data.notifications[0];
+            if (last.id !== window._lastNotifId) {
+                window._lastNotifId = last.id;
+                if ('${appData.notification_enabled}' === 'true') {
+                    alert('📢 ' + last.title + '\\n\\n' + last.message);
+                }
+            }
+        }
+    } catch(e) {}
+}, 15000);
 </script>`;
     
     res.send(content);
@@ -188,7 +210,7 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     
-    const result = await pool.query(
+    await pool.query(
       `UPDATE apps SET 
         name = COALESCE($1, name),
         package_name = COALESCE($2, package_name),
@@ -204,11 +226,10 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
         admob_interstitial_id = COALESCE($12, admob_interstitial_id),
         version = version + 1,
         updated_at = NOW()
-      WHERE id = $13 RETURNING *`,
+      WHERE id = $13`,
       [name, package_name, app_type, content, description, parseInt(fps) || 120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, id]
     );
     
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     if (icon_url) await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2', [icon_url, id]);
     
     res.json({ success: true, message: '✅ تم الحفظ!' });
@@ -329,7 +350,7 @@ public class MainActivity extends Activity {
 
 app.get('/api/build-status/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT status, apk_url, version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
   } catch (e) {
