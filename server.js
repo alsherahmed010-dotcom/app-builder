@@ -1,32 +1,22 @@
 const express = require('express');
-const cors = require('cors');
+const { exec } = require('child_process');
 const { Pool } = require('pg');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs-extra');
-require('dotenv').config();
-const buildService = require('./build-service');
-
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config();
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
 app.use('/builds', express.static('builds'));
 
 const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
-
-const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: { rejectUnauthorized: false }
-});
+const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
 
 async function initDB() {
   try {
-    // إنشاء الجدول لو مش موجود
     await pool.query(`
       CREATE TABLE IF NOT EXISTS apps (
         id SERIAL PRIMARY KEY,
@@ -34,43 +24,32 @@ async function initDB() {
         package_name VARCHAR(255) NOT NULL,
         app_type VARCHAR(50) NOT NULL DEFAULT 'html',
         content TEXT,
-        icon_url TEXT,
         apk_url TEXT,
         status VARCHAR(50) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    
-    // إضافة الأعمدة الناقصة
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS apk_url TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'`);
-    
     console.log('✅ Database initialized');
-  } catch (error) {
-    console.error('❌ Database error:', error.message);
-    setTimeout(initDB, 5000);
+  } catch (e) {
+    console.error('DB error:', e.message);
   }
 }
-
 initDB();
 
 app.get('/', (req, res) => {
-  res.json({ status: 'running', service: 'App Builder API' });
+  res.json({ status: 'running', service: 'APK Builder' });
 });
 
-app.post('/api/apps', upload.single('icon'), async (req, res) => {
+app.post('/api/apps', async (req, res) => {
   try {
     const { name, package_name, app_type, content } = req.body;
-    const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     const result = await pool.query(
-      'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [name, package_name, app_type, content, icon_url]
+      'INSERT INTO apps (name, package_name, app_type, content) VALUES ($1,$2,$3,$4) RETURNING *',
+      [name, package_name, app_type, content]
     );
     res.json({ success: true, app: result.rows[0] });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -78,18 +57,18 @@ app.get('/api/apps', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps ORDER BY created_at DESC');
     res.json({ success: true, apps: result.rows });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
 app.get('/api/apps/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'App not found' });
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, app: result.rows[0] });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -97,62 +76,95 @@ app.put('/api/apps/:id', async (req, res) => {
   try {
     const { name, content, app_type } = req.body;
     const result = await pool.query(
-      'UPDATE apps SET name = $1, content = $2, app_type = $3, updated_at = NOW() WHERE id = $4 RETURNING *',
+      'UPDATE apps SET name=$1, content=$2, app_type=$3 WHERE id=$4 RETURNING *',
       [name, content, app_type, req.params.id]
     );
     res.json({ success: true, app: result.rows[0] });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.delete('/api/apps/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM apps WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
-  res.json({ success: true, message: 'Build started in background' });
+  res.json({ success: true, message: 'Build started' });
   
   try {
-    await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['building', id]);
+    await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['building', id]);
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
     const appData = result.rows[0];
     
-    let buildResult;
-    if (appData.app_type === 'html') {
-      buildResult = await buildService.buildHTMLApp({
-        name: appData.name,
-        packageName: appData.package_name,
-        htmlContent: appData.content,
-        iconPath: null
-      });
-    } else {
-      buildResult = await buildService.buildWebViewApp({
-        name: appData.name,
-        packageName: appData.package_name,
-        url: appData.content,
-        iconPath: null
-      });
+    const safeName = (appData.package_name || 'com.app.' + appData.name.toLowerCase()).replace(/[^a-z0-9.]/g, '');
+    const appDir = path.join(__dirname, 'builds', String(id));
+    
+    fs.mkdirSync(`${appDir}/assets`, { recursive: true });
+    const javaDir = `${appDir}/java/${safeName.replace(/\./g, '/')}`;
+    fs.mkdirSync(javaDir, { recursive: true });
+    
+    let htmlContent = appData.content;
+    if (appData.app_type === 'webview') {
+      htmlContent = `<!DOCTYPE html><html><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
     }
     
-    const apkPath = await buildService.buildAPK(buildResult.buildDir, buildResult.buildId);
-    const apkUrl = `/builds/${path.basename(apkPath)}`;
+    fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     
-    await pool.query(
-      'UPDATE apps SET apk_url = $1, status = $2 WHERE id = $3',
-      [apkUrl, 'completed', id]
-    );
+    fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:label="${appData.name}" android:usesCleartextTraffic="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>`);
     
-    console.log(`✅ Build completed: ${apkUrl}`);
-  } catch (error) {
-    console.error('Build error:', error.message);
-    await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['failed', id]);
+    const javaFile = `${javaDir}/MainActivity.java`;
+    fs.writeFileSync(javaFile, `package ${safeName};
+import android.app.Activity;
+import android.os.Bundle;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+public class MainActivity extends Activity {
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        WebView w = new WebView(this);
+        w.getSettings().setJavaScriptEnabled(true);
+        w.setWebViewClient(new WebViewClient());
+        w.loadUrl("file:///android_asset/index.html");
+        setContentView(w);
+    }
+}`);
+    
+    const buildCmd = `cd ${appDir} && \
+    mkdir -p classes && \
+    javac -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d classes ${javaFile} && \
+    cd classes && find . -name "*.class" > ../classes.txt && cd .. && \
+    $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . $(cat classes.txt) && \
+    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets && \
+    $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
+    $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
+    keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true && \
+    $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android app-final.apk && \
+    cp app-final.apk ${safeName}.apk`;
+    
+    exec(buildCmd, { timeout: 120000 }, async (err, stdout, stderr) => {
+      if (err) {
+        console.error('Build error:', stderr || err.message);
+        await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
+      } else {
+        const apkUrl = `/builds/${id}/${safeName}.apk`;
+        await pool.query('UPDATE apps SET apk_url=$1, status=$2 WHERE id=$3', [apkUrl, 'completed', id]);
+        console.log(`✅ Build completed: ${apkUrl}`);
+      }
+    });
+  } catch (e) {
+    console.error('Error:', e.message);
+    await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
   }
 });
 
@@ -161,18 +173,18 @@ app.get('/api/build-status/:id', async (req, res) => {
     const result = await pool.query('SELECT status, apk_url FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
 app.get('/api/download/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0 || !result.rows[0].apk_url) return res.status(404).json({ error: 'APK not found' });
+    if (result.rows.length === 0 || !result.rows[0].apk_url) return res.status(404).json({ error: 'Not found' });
     res.download(path.join(__dirname, result.rows[0].apk_url), `${result.rows[0].name}.apk`);
-  } catch (error) {
-    res.status(500).json({ error: 'Download failed' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
