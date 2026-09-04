@@ -19,19 +19,27 @@
         .app-info { flex: 1; }
         .app-name { font-size: 14px; font-weight: 600; color: #333; }
         .app-desc { font-size: 11px; color: #888; margin-top: 3px; }
-        .app-type { font-size: 10px; color: #667eea; margin-top: 3px; }
         .app-status { font-size: 10px; padding: 3px 10px; border-radius: 10px; display: inline-block; margin-top: 5px; }
-        .status-pending { background: #fff3cd; color: #856404; }
-        .status-building { background: #cce5ff; color: #004085; }
         .status-completed { background: #d4edda; color: #155724; }
+        .status-building { background: #cce5ff; color: #004085; }
         .status-failed { background: #f8d7da; color: #721c24; }
-        .app-actions { display: flex; gap: 6px; flex-direction: column; }
-        .btn { padding: 6px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 600; border: none; cursor: pointer; text-align: center; }
+        .app-actions { display: flex; gap: 5px; }
+        .btn { padding: 8px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 600; border: none; cursor: pointer; text-align: center; white-space: nowrap; }
         .btn-build { background: #667eea; color: white; }
         .btn-edit { background: #f0f0f0; color: #333; }
+        .btn-notify { background: #ff9800; color: white; }
         .btn-delete { background: #fee; color: #e74c3c; }
         .btn-download { background: #28a745; color: white; }
         .empty { text-align: center; color: #999; font-size: 13px; padding: 40px; }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; border-radius: 15px; padding: 25px; max-width: 400px; width: 90%; }
+        .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 15px; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; }
+        .send-btn { width: 100%; padding: 10px; background: #ff9800; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .close-btn { width: 100%; padding: 8px; background: #f0f0f0; color: #333; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -45,8 +53,44 @@
     <div class="container">
         <div id="appsList"></div>
     </div>
+    
+    <div class="modal" id="notifyModal">
+        <div class="modal-content">
+            <div class="modal-title">🔔 إرسال إشعار</div>
+            <form id="notifyForm">
+                <div class="form-group">
+                    <label>📝 العنوان</label>
+                    <input type="text" id="notifyTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>💬 النص</label>
+                    <textarea id="notifyMessage" required style="min-height:60px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>📍 النوع</label>
+                    <select id="notifyType">
+                        <option value="in-app">جوه التطبيق</option>
+                        <option value="system">إشعار النظام</option>
+                        <option value="both">الاثنين</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>🔊 الصوت</label>
+                    <select id="notifySound">
+                        <option value="default">افتراضي</option>
+                        <option value="beep">بييب</option>
+                        <option value="alarm">إنذار</option>
+                        <option value="silent">بدون</option>
+                    </select>
+                </div>
+                <button type="submit" class="send-btn">📤 إرسال</button>
+            </form>
+            <button class="close-btn" onclick="closeNotify()">إلغاء</button>
+        </div>
+    </div>
     <script>
         const API_URL = 'https://app-builder-production-ab4d.up.railway.app';
+        let notifyAppId = null;
         
         async function loadApps() {
             try {
@@ -65,13 +109,13 @@
                         <div class="app-info">
                             <div class="app-name">${app.name}</div>
                             ${app.description ? `<div class="app-desc">${app.description}</div>` : ''}
-                            <div class="app-type">${app.app_type === 'html' ? '💻 HTML' : '🌐 WebView'} | FPS: ${app.fps || 'تلقائي'} | v${app.version || 1}</div>
                             <span class="app-status status-${app.status}">${app.status}</span>
                         </div>
                         <div class="app-actions">
-                            <a href="/settings.html?id=${app.id}" class="btn btn-edit">✏️ تعديل</a>
-                            ${app.status === 'completed' ? `<a href="${API_URL}${app.apk_url}" class="btn btn-download">⬇️</a>` : `<a href="/build.html?id=${app.id}" class="btn btn-build">🔨</a>`}
-                            <button class="btn btn-delete" onclick="deleteApp(${app.id})">🗑️</button>
+                            <button class="btn btn-notify" onclick="openNotify(${app.id})" title="إرسال إشعار">🔔</button>
+                            <a href="/settings.html?id=${app.id}" class="btn btn-edit" title="تعديل">✏️</a>
+                            ${app.status === 'completed' ? `<a href="${API_URL}${app.apk_url}" class="btn btn-download" title="تحميل">⬇️</a>` : `<a href="/build.html?id=${app.id}" class="btn btn-build" title="بناء">🔨</a>`}
+                            <button class="btn btn-delete" onclick="deleteApp(${app.id})" title="حذف">🗑️</button>
                         </div>
                     </div>
                 `).join('');
@@ -80,13 +124,46 @@
             }
         }
         
+        function openNotify(appId) {
+            notifyAppId = appId;
+            document.getElementById('notifyModal').classList.add('show');
+        }
+        
+        function closeNotify() {
+            document.getElementById('notifyModal').classList.remove('show');
+        }
+        
+        document.getElementById('notifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('notifyTitle').value;
+            const message = document.getElementById('notifyMessage').value;
+            const type = document.getElementById('notifyType').value;
+            const sound = document.getElementById('notifySound').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/notify/${notifyAppId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, message, type, sound })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ تم الإرسال!');
+                    closeNotify();
+                    document.getElementById('notifyForm').reset();
+                }
+            } catch (error) {
+                alert('❌ فشل');
+            }
+        });
+        
         async function deleteApp(id) {
-            if (!confirm('⚠️ هل أنت متأكد من حذف هذا التطبيق؟')) return;
+            if (!confirm('⚠️ متأكد؟')) return;
             try {
                 await fetch(`${API_URL}/api/apps/${id}`, { method: 'DELETE' });
                 loadApps();
             } catch (error) {
-                alert('❌ فشل الحذف');
+                alert('❌ فشل');
             }
         }
         
