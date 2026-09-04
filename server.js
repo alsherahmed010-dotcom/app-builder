@@ -8,10 +8,24 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// Firebase - مع إصلاح المفتاح النهائي
+// Firebase مع إصلاح نهائي
 let admin = null;
 const rawKey = process.env.FIREBASE_PRIVATE_KEY || '';
-const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+
+// إصلاح المفتاح - تحويل أي صيغة لـ newlines حقيقية
+let privateKey = rawKey;
+// لو المفتاح فيه \n حرفية
+privateKey = privateKey.replace(/\\n/g, '\n');
+// لو المفتاح كله سطر واحد (Railway بيقص الـ newlines)
+if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+  const base64Part = privateKey.replace('-----BEGIN PRIVATE KEY-----', '').replace('-----END PRIVATE KEY-----', '').trim();
+  const chunks = base64Part.match(/.{1,64}/g) || [];
+  privateKey = '-----BEGIN PRIVATE KEY-----\n' + chunks.join('\n') + '\n-----END PRIVATE KEY-----\n';
+}
+
+console.log('Key length:', privateKey.length);
+console.log('Key starts:', privateKey.substring(0, 30));
+console.log('Has newlines:', privateKey.includes('\n'));
 
 if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
   try {
@@ -26,14 +40,9 @@ if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT
     console.log('✅ Firebase initialized');
   } catch (e) {
     console.error('❌ Firebase init error:', e.message);
-    console.error('Key starts with:', privateKey.substring(0, 30));
-    console.error('Has newlines:', privateKey.includes('\n'));
   }
 } else {
   console.log('⚠️ Firebase env vars missing');
-  console.log('Project ID:', process.env.FIREBASE_PROJECT_ID ? '✓' : '✗');
-  console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL ? '✓' : '✗');
-  console.log('Private Key:', process.env.FIREBASE_PRIVATE_KEY ? '✓' : '✗');
 }
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -80,10 +89,8 @@ app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message, type, sound } = req.body;
     await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
-    
     const appResult = await pool.query('SELECT fcm_token FROM apps WHERE id = $1', [req.params.id]);
     const fcmToken = appResult.rows[0]?.fcm_token;
-    
     if (fcmToken && admin) {
       await admin.messaging().send({
         token: fcmToken,
@@ -105,9 +112,7 @@ app.post('/api/register-token/:id', async (req, res) => {
   try {
     await pool.query('UPDATE apps SET fcm_token = $1 WHERE id = $2', [req.body.token, req.params.id]);
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/app-content/:id', async (req, res) => {
@@ -117,16 +122,11 @@ app.get('/api/app-content/:id', async (req, res) => {
     const appData = result.rows[0];
     let content = appData.content || '';
     const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
-    
     if (appData.welcome_message) content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
     if (appData.admob_enabled && appData.admob_banner_id) content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>`;
-    
     content += `<script>(function(){var v=${parseInt(appData.version)||1},n=0;setInterval(function(){fetch('${apiBase}/api/check-update/${req.params.id}').then(r=>r.json()).then(d=>{if(d.version>v&&d.latest_apk_url){if(confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟'))window.open('${apiBase}'+d.latest_apk_url,'_blank')}}).catch(()=>{})},30000);setInterval(function(){fetch('${apiBase}/api/notifications/${req.params.id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;if(${appData.notification_enabled?'true':'false'})alert('📢 '+l.title+'\\n\\n'+l.message)}}}).catch(()=>{})},10000)})();</script>`;
-    
     res.send(content);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/check-update/:id', async (req, res) => {
@@ -194,18 +194,14 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
-    
     const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
-    
     fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">App</string></resources>`);
-    
     let hasIcon = false;
     if (appData.icon_url) {
       const iconPath = path.join(__dirname, appData.icon_url);
       if (fs.existsSync(iconPath)) { fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`); hasIcon = true; }
     }
-    
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
@@ -219,7 +215,6 @@ app.post('/api/build/:id', async (req, res) => {
         </activity>
     </application>
 </manifest>`);
-    
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
@@ -239,7 +234,6 @@ public class MainActivity extends Activity {
         setContentView(w);
     }
 }`);
-    
     const buildCmd = `cd ${appDir} && \
     $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && \
     javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
@@ -250,7 +244,6 @@ public class MainActivity extends Activity {
     cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null; \
     $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android app-final.apk && \
     cp app-final.apk final.apk`;
-    
     exec(buildCmd, { timeout: 180000 }, async (err, stdout, stderr) => {
       if (err) {
         console.error('Build error:', stderr || err.message);
