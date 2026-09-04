@@ -5,94 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تطبيقاتي</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; transition: all 0.3s; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fa; min-height: 100vh; }
-        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .nav-buttons { display: flex; gap: 10px; }
-        .nav-btn { padding: 8px 20px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
-        .nav-btn.active { background: #667eea; color: white; }
-        .nav-btn.inactive { background: #f0f0f0; color: #555; }
-        .container { max-width: 650px; margin: 30px auto; padding: 20px; }
-        .app-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 12px; }
-        .app-icon { width: 55px; height: 55px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; overflow: hidden; flex-shrink: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; }
+        .nav-btn { padding: 10px 25px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; }
+        .nav-btn.active { background: #238636; color: white; }
+        .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
+        .container { max-width: 600px; margin: 30px auto; padding: 20px; }
+        .app-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
+        .app-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; overflow: hidden; flex-shrink: 0; background: #21262d; }
         .app-icon img { width: 100%; height: 100%; object-fit: cover; }
         .app-info { flex: 1; }
-        .app-name { font-size: 14px; font-weight: 600; color: #333; }
-        .app-desc { font-size: 11px; color: #888; margin-top: 3px; }
-        .app-status { font-size: 10px; padding: 3px 10px; border-radius: 10px; display: inline-block; margin-top: 5px; }
-        .status-completed { background: #d4edda; color: #155724; }
-        .status-building { background: #cce5ff; color: #004085; }
-        .status-failed { background: #f8d7da; color: #721c24; }
-        .app-actions { display: flex; gap: 5px; }
-        .btn { padding: 8px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 600; border: none; cursor: pointer; }
-        .btn-notify { background: #ff9800; color: white; }
-        .btn-edit { background: #f0f0f0; color: #333; }
-        .btn-download { background: #28a745; color: white; }
-        .btn-delete { background: #fee; color: #e74c3c; }
-        .empty { text-align: center; color: #999; font-size: 13px; padding: 40px; }
-        .settings-gear { position: fixed; top: 15px; right: 15px; z-index: 999; cursor: pointer; font-size: 22px; background: white; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .theme-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
-        .theme-modal.show { display: flex; }
-        .theme-content { background: white; border-radius: 20px; padding: 25px; max-width: 380px; width: 90%; }
-        .theme-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; text-align: center; }
-        .theme-option { padding: 14px; border: 2px solid #ddd; border-radius: 12px; cursor: pointer; margin-bottom: 10px; text-align: center; font-weight: 600; font-size: 14px; }
-        .theme-option:hover { border-color: #667eea; }
-        body.theme-dark { background: #1a1a2e; }
-        body.theme-dark .navbar { background: #16213e; }
-        body.theme-dark .app-card { background: #16213e; }
-        body.theme-dark .app-name { color: #eee; }
-        body.theme-dark .nav-btn.inactive { background: #0f3460; color: #eee; }
-        body.theme-dark .settings-gear { background: #16213e; }
-        body.theme-dark .theme-content { background: #16213e; color: #fff; }
-        body.theme-dark .theme-option { border-color: #0f3460; }
-        body.theme-elegant { background: #faf5f0; font-family: Georgia, serif; }
-        body.theme-elegant .navbar { background: #fff8f0; }
-        body.theme-elegant .app-card { background: #fff; border: 1px solid #e8d5b5; border-radius: 0; }
-        body.theme-elegant .nav-btn.active { background: #c9a86c; }
-        body.theme-elegant .app-name { color: #8b6914; }
-        body.theme-amazing { background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4); background-size: 400% 400%; animation: gradientBG 15s ease infinite; }
-        @keyframes gradientBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-        body.theme-amazing .navbar { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); }
-        body.theme-amazing .app-card { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-radius: 20px; }
-        body.theme-amazing .nav-btn.active { background: linear-gradient(135deg, #ff6b6b, #4ecdc4); border-radius: 25px; }
-        body.theme-modern { background: #0a0a0a; font-family: Inter, sans-serif; }
-        body.theme-modern .navbar { background: #111; border-bottom: 1px solid #333; }
-        body.theme-modern .app-card { background: #111; border: 1px solid #333; border-radius: 0; }
-        body.theme-modern .app-name { color: #00ff88; }
-        body.theme-modern .nav-btn { border-radius: 0; letter-spacing: 1px; text-transform: uppercase; font-size: 12px; }
-        body.theme-modern .nav-btn.active { background: #00ff88; color: #000; }
-        body.theme-modern .settings-gear { background: #111; color: #00ff88; border: 1px solid #333; }
-        body.theme-modern .btn { border-radius: 0; }
+        .app-name { font-size: 15px; font-weight: 700; color: #f0f6fc; }
+        .app-desc { font-size: 11px; color: #8b949e; margin-top: 3px; }
+        .app-status { font-size: 10px; padding: 3px 12px; border-radius: 10px; display: inline-block; margin-top: 5px; }
+        .status-completed { background: #23863630; color: #3fb950; }
+        .status-building { background: #1f6feb30; color: #58a6ff; }
+        .status-failed { background: #da363330; color: #f85149; }
+        .app-actions { display: flex; gap: 6px; }
+        .btn { padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; border: none; cursor: pointer; }
+        .btn-notify { background: #d29922; color: #fff; }
+        .btn-edit { background: #21262d; color: #c9d1d9; }
+        .btn-download { background: #238636; color: white; }
+        .btn-delete { background: #da363330; color: #f85149; }
+        .empty { text-align: center; color: #8b949e; font-size: 14px; padding: 50px; }
     </style>
 </head>
 <body>
-    <div class="settings-gear" onclick="document.getElementById('themeModal').classList.add('show')">⚙️</div>
-    <div class="theme-modal" id="themeModal">
-        <div class="theme-content">
-            <div class="theme-title">🎨 اختر المظهر</div>
-            <div class="theme-option" onclick="setTheme('')">☀️ افتراضي</div>
-            <div class="theme-option" onclick="setTheme('theme-dark')">🌙 داكن</div>
-            <div class="theme-option" onclick="setTheme('theme-elegant')">👑 راقي</div>
-            <div class="theme-option" onclick="setTheme('theme-amazing')">🌈 مذهل</div>
-            <div class="theme-option" onclick="setTheme('theme-modern')">⚡ حديث</div>
-            <button onclick="document.getElementById('themeModal').classList.remove('show')" style="width:100%;padding:10px;background:#f0f0f0;border:none;border-radius:10px;cursor:pointer;margin-top:10px;">إغلاق</button>
-        </div>
-    </div>
     <nav class="navbar">
-        <div class="nav-buttons">
-            <a href="/create.html" class="nav-btn inactive">إنشاء</a>
-            <a href="/my-apps.html" class="nav-btn active">تطبيقاتي</a>
-        </div>
+        <a href="/create.html" class="nav-btn inactive">إنشاء</a>
+        <a href="/my-apps.html" class="nav-btn active">تطبيقاتي</a>
     </nav>
     <div class="container">
         <div id="appsList"></div>
     </div>
     <script>
         const API_URL = 'https://app-builder-production-ab4d.up.railway.app';
-        function setTheme(theme) { document.body.className = theme; localStorage.setItem('app-builder-theme', theme); document.getElementById('themeModal').classList.remove('show'); }
-        const savedTheme = localStorage.getItem('app-builder-theme');
-        if (savedTheme) document.body.className = savedTheme;
-        
         async function loadApps() {
             try {
                 const response = await fetch(`${API_URL}/api/apps`);
@@ -117,25 +65,14 @@
                 `).join('');
             } catch (error) { document.getElementById('appsList').innerHTML = '<div class="empty">❌ فشل</div>'; }
         }
-        
         function openNotify(appId) {
             const title = prompt('عنوان الإشعار:');
             if (!title) return;
             const message = prompt('نص الإشعار:');
             if (!message) return;
-            fetch(`${API_URL}/api/notify/${appId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, message })
-            }).then(r => r.json()).then(d => alert('✅ تم الإرسال!'));
+            fetch(`${API_URL}/api/notify/${appId}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title, message}) }).then(r => r.json()).then(d => alert('✅ تم الإرسال!'));
         }
-        
-        async function deleteApp(id) {
-            if (!confirm('⚠️ متأكد من الحذف؟')) return;
-            await fetch(`${API_URL}/api/apps/${id}`, { method: 'DELETE' });
-            loadApps();
-        }
-        
+        async function deleteApp(id) { if (!confirm('⚠️ متأكد؟')) return; await fetch(`${API_URL}/api/apps/${id}`, { method: 'DELETE' }); loadApps(); }
         loadApps();
     </script>
 </body>

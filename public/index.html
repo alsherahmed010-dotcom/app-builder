@@ -5,86 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>الرئيسية</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; transition: all 0.3s; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fa; min-height: 100vh; }
-        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .nav-buttons { display: flex; gap: 10px; }
-        .nav-btn { padding: 8px 20px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
-        .nav-btn.active { background: #667eea; color: white; }
-        .nav-btn.inactive { background: #f0f0f0; color: #555; }
-        .container { max-width: 500px; margin: 60px auto; padding: 30px; background: white; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.08); text-align: center; }
-        .logo { font-size: 3em; margin-bottom: 20px; }
-        .title { font-size: 18px; color: #333; margin-bottom: 25px; font-weight: 600; }
-        .main-btn { display: block; padding: 14px; margin: 10px 0; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 600; }
-        .btn-create { background: #667eea; color: white; }
-        .btn-apps { background: white; color: #667eea; border: 2px solid #667eea; }
-        .settings-gear { position: fixed; top: 15px; right: 15px; z-index: 999; cursor: pointer; font-size: 22px; background: white; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .theme-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
-        .theme-modal.show { display: flex; }
-        .theme-content { background: white; border-radius: 20px; padding: 25px; max-width: 380px; width: 90%; }
-        .theme-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; text-align: center; }
-        .theme-option { padding: 14px; border: 2px solid #ddd; border-radius: 12px; cursor: pointer; margin-bottom: 10px; text-align: center; font-weight: 600; font-size: 14px; }
-        body.theme-dark { background: #1a1a2e; }
-        body.theme-dark .navbar { background: #16213e; }
-        body.theme-dark .container { background: #16213e; }
-        body.theme-dark .title { color: #eee; }
-        body.theme-dark .nav-btn.inactive { background: #0f3460; color: #eee; }
-        body.theme-dark .settings-gear { background: #16213e; }
-        body.theme-dark .theme-content { background: #16213e; color: #fff; }
-        body.theme-dark .theme-option { border-color: #0f3460; }
-        body.theme-elegant { background: #faf5f0; font-family: Georgia, serif; }
-        body.theme-elegant .navbar { background: #fff8f0; }
-        body.theme-elegant .nav-btn.active { background: #c9a86c; }
-        body.theme-elegant .container { background: #fff; border: 1px solid #e8d5b5; border-radius: 0; }
-        body.theme-elegant .btn-create { background: #c9a86c; border-radius: 0; }
-        body.theme-elegant .btn-apps { color: #c9a86c; border-color: #c9a86c; border-radius: 0; }
-        body.theme-elegant .title { color: #8b6914; }
-        body.theme-amazing { background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4); background-size: 400% 400%; animation: gradientBG 15s ease infinite; }
-        @keyframes gradientBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-        body.theme-amazing .navbar { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); }
-        body.theme-amazing .container { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-radius: 25px; }
-        body.theme-amazing .btn-create { background: linear-gradient(135deg, #ff6b6b, #4ecdc4); border-radius: 25px; }
-        body.theme-amazing .btn-apps { border-color: #ff6b6b; color: #ff6b6b; border-radius: 25px; }
-        body.theme-modern { background: #0a0a0a; font-family: Inter, sans-serif; }
-        body.theme-modern .navbar { background: #111; border-bottom: 1px solid #333; }
-        body.theme-modern .container { background: #111; border: 1px solid #333; border-radius: 0; }
-        body.theme-modern .title { color: #00ff88; }
-        body.theme-modern .btn-create { background: #00ff88; color: #000; border-radius: 0; }
-        body.theme-modern .btn-apps { border-color: #00ff88; color: #00ff88; border-radius: 0; }
-        body.theme-modern .nav-btn.active { background: #00ff88; color: #000; }
-        body.theme-modern .settings-gear { background: #111; color: #00ff88; border: 1px solid #333; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; }
+        .nav-btn { padding: 10px 25px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; }
+        .nav-btn.active { background: #238636; color: white; }
+        .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
+        .container { max-width: 450px; margin: 80px auto; padding: 35px 25px; background: #161b22; border: 1px solid #30363d; border-radius: 16px; text-align: center; }
+        .logo { font-size: 50px; margin-bottom: 20px; }
+        .title { font-size: 20px; font-weight: 800; margin-bottom: 30px; color: #f0f6fc; }
+        .main-btn { display: block; padding: 16px; margin: 12px 0; border-radius: 10px; text-decoration: none; font-size: 15px; font-weight: 700; }
+        .btn-create { background: #238636; color: white; }
+        .btn-create:hover { background: #2ea043; }
+        .btn-apps { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+        .btn-apps:hover { border-color: #8b949e; }
     </style>
 </head>
 <body>
-    <div class="settings-gear" onclick="document.getElementById('themeModal').classList.add('show')">⚙️</div>
-    <div class="theme-modal" id="themeModal">
-        <div class="theme-content">
-            <div class="theme-title">🎨 اختر المظهر</div>
-            <div class="theme-option" onclick="setTheme('')">☀️ افتراضي</div>
-            <div class="theme-option" onclick="setTheme('theme-dark')">🌙 داكن</div>
-            <div class="theme-option" onclick="setTheme('theme-elegant')">👑 راقي</div>
-            <div class="theme-option" onclick="setTheme('theme-amazing')">🌈 مذهل</div>
-            <div class="theme-option" onclick="setTheme('theme-modern')">⚡ حديث</div>
-            <button onclick="document.getElementById('themeModal').classList.remove('show')" style="width:100%;padding:10px;background:#f0f0f0;border:none;border-radius:10px;cursor:pointer;margin-top:10px;">إغلاق</button>
-        </div>
-    </div>
     <nav class="navbar">
-        <span style="font-size:16px;font-weight:700;color:#667eea;"></span>
-        <div class="nav-buttons">
-            <a href="/" class="nav-btn active">إنشاء</a>
-            <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
-        </div>
+        <a href="/" class="nav-btn active">إنشاء</a>
+        <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
     </nav>
     <div class="container">
         <div class="logo">🚀</div>
-        <div class="title">أنشئ تطبيق أندرويد حقيقي بسهولة</div>
+        <div class="title">أنشئ تطبيق أندرويد</div>
         <a href="/create.html" class="main-btn btn-create">➕ إنشاء تطبيق جديد</a>
         <a href="/my-apps.html" class="main-btn btn-apps">📱 تطبيقاتي</a>
     </div>
-    <script>
-        function setTheme(theme) { document.body.className = theme; localStorage.setItem('app-builder-theme', theme); document.getElementById('themeModal').classList.remove('show'); }
-        const savedTheme = localStorage.getItem('app-builder-theme');
-        if (savedTheme) document.body.className = savedTheme;
-    </script>
 </body>
 </html>
