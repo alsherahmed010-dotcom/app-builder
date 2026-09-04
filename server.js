@@ -17,7 +17,7 @@ if (!privateKey.includes('\n') && privateKey.includes('BEGIN')) {
   privateKey = '-----BEGIN PRIVATE KEY-----\n' + chunks.join('\n') + '\n-----END PRIVATE KEY-----\n';
 }
 if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
-  try { admin = require('firebase-admin'); admin.initializeApp({ credential: admin.credential.cert({ projectId: process.env.FIREBASE_PROJECT_ID, privateKey, clientEmail: process.env.FIREBASE_CLIENT_EMAIL }) }); console.log('✅ Firebase initialized'); } catch (e) { console.error('❌ Firebase:', e.message); }
+  try { admin = require('firebase-admin'); admin.initializeApp({ credential: admin.credential.cert({ projectId: process.env.FIREBASE_PROJECT_ID, privateKey, clientEmail: process.env.FIREBASE_CLIENT_EMAIL }) }); console.log('✅ Firebase'); } catch (e) {}
 }
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -39,58 +39,48 @@ async function initDB() {
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', description TEXT, fps INTEGER DEFAULT 120, welcome_message TEXT, exit_message TEXT, notification_enabled BOOLEAN DEFAULT false, admob_enabled BOOLEAN DEFAULT false, admob_banner_id TEXT, admob_interstitial_id TEXT, admob_rewarded_id TEXT, admob_appopen_id TEXT, version INTEGER DEFAULT 1, latest_apk_url TEXT, fcm_token TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
     await pool.query(`CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, app_id INTEGER, title VARCHAR(255), message TEXT, type VARCHAR(50), sound VARCHAR(50), created_at TIMESTAMP DEFAULT NOW())`);
-    console.log('✅ Database initialized');
+    console.log('✅ DB');
   } catch (e) { console.error('DB:', e.message); }
 }
 initDB();
 
 const keystorePath = path.join(__dirname, 'debug.keystore');
 if (!fs.existsSync(keystorePath)) {
-  exec(`keytool -genkey -v -keystore ${keystorePath} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"`, (err) => { if (err) console.error('Keystore:', err.message); else console.log('✅ Keystore created'); });
+  exec(`keytool -genkey -v -keystore ${keystorePath} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"`, (err) => {});
 }
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-app.post('/api/notify/:id', async (req, res) => {
-  try {
-    const { title, message, type, sound } = req.body;
-    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
-    const r = await pool.query('SELECT fcm_token FROM apps WHERE id=$1', [req.params.id]);
-    if (r.rows[0]?.fcm_token && admin) { await admin.messaging().send({ token: r.rows[0].fcm_token, notification: { title, body: message } }); res.json({ success: true, message: '✅ تم الإرسال!' }); }
-    else { res.json({ success: true, message: '✅ تم الحفظ!' }); }
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// محتوى التطبيق - كامل من غير أي اسم
+// WebView مباشر - يفتح الموقع مباشرة من غير iframe
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
-    if (r.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (r.rows.length === 0) return res.status(404).send('Not found');
     const appData = r.rows[0];
+    
+    // لو WebView - نعمل redirect للموقع
+    if (appData.app_type === 'webview' && appData.content) {
+      return res.redirect(appData.content);
+    }
+    
+    // لو HTML - نعرضه مباشرة
     let content = appData.content || '';
+    if (!content.includes('<!DOCTYPE') && !content.includes('<html')) {
+      content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${content}</body></html>`;
+    }
+    
     const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
-    
-    // لو HTML - نعرضه مباشرة من غير أي إضافة
-    if (appData.app_type === 'html' && content.trim().startsWith('<!DOCTYPE') || content.trim().startsWith('<html')) {
-      // HTML كامل - نعرضه كما هو
-    } else if (appData.app_type === 'webview') {
-      // WebView - نعرض الموقع في iframe
-      content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="${content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
-    } else {
-      // HTML جزئي - نغلفه
-      content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body>${content}</body></html>`;
-    }
-    
-    // إعلانات HTML لو مفعلة
-    if (appData.admob_enabled && appData.admob_banner_id) {
-      const clientId = appData.admob_banner_id.split('/')[0];
-      content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${clientId}" crossorigin="anonymous"></script><ins class="adsbygoogle" style="display:block" data-ad-client="${clientId}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle=window.adsbygoogle||[]).push({});</script>`;
-    }
-    
-    // كود التحديث والإشعارات
-    content += `<script>(function(){var v=${parseInt(appData.version)||1},n=0;setInterval(function(){fetch('${apiBase}/api/check-update/${req.params.id}').then(r=>r.json()).then(d=>{if(d.version>v&&d.latest_apk_url){if(confirm('🔄 يوجد تحديث جديد!'))window.open('${apiBase}'+d.latest_apk_url,'_blank')}}).catch(()=>{})},30000);setInterval(function(){fetch('${apiBase}/api/notifications/${req.params.id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;alert('📢 '+l.title+'\\n\\n'+l.message)}}}).catch(()=>{})},10000)})();</script>`;
+    content += `<script>(function(){var v=${parseInt(appData.version)||1},n=0;setInterval(function(){fetch('${apiBase}/api/check-update/${req.params.id}').then(r=>r.json()).then(d=>{if(d.version>v&&d.latest_apk_url){if(confirm('🔄 تحديث جديد!'))window.open('${apiBase}'+d.latest_apk_url,'_blank')}}).catch(()=>{})},30000);setInterval(function(){fetch('${apiBase}/api/notifications/${req.params.id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;alert('📢 '+l.title+'\\n\\n'+l.message)}}}).catch(()=>{})},10000)})();</script>`;
     
     res.send(content);
+  } catch (e) { res.status(500).send('Error'); }
+});
+
+app.post('/api/notify/:id', async (req, res) => {
+  try {
+    const { title, message } = req.body;
+    await pool.query('INSERT INTO notifications (app_id, title, message) VALUES ($1,$2,$3)', [req.params.id, title, message]);
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -147,11 +137,9 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // HTML يفتح المحتوى مباشرة
+    // WebView مباشر - يفتح الموقع من غير iframe
     const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
     fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
-    
-    // اسم التطبيق الحقيقي
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
     let hasIcon = false;
@@ -171,6 +159,7 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
+    // WebView يفتح الموقع مباشرة
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
@@ -185,8 +174,20 @@ public class MainActivity extends Activity {
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        w.setWebViewClient(new WebViewClient());
-        w.loadUrl("file:///android_asset/index.html");
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
+        s.setAllowFileAccess(true);
+        s.setAllowContentAccess(true);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        w.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                view.loadUrl(url);
+                return true;
+            }
+        });
+        String url = "${appData.app_type === 'webview' ? appData.content : 'file:///android_asset/index.html'}";
+        w.loadUrl(url);
         setContentView(w);
     }
 }`);
