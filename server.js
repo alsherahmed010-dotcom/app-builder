@@ -48,7 +48,6 @@ async function initDB() {
       admob_interstitial_id TEXT,
       version INTEGER DEFAULT 1,
       latest_apk_url TEXT,
-      fcm_token TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`);
@@ -59,7 +58,6 @@ async function initDB() {
       message TEXT,
       type VARCHAR(50),
       sound VARCHAR(50),
-      sent BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT NOW()
     )`);
     console.log('✅ Database initialized');
@@ -79,7 +77,6 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// محتوى التطبيق - بدون أخطاء JavaScript
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -89,24 +86,15 @@ app.get('/api/app-content/:id', async (req, res) => {
     let content = appData.content || '';
     const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
     
-    // رسالة ترحيب
     if (appData.welcome_message) {
       content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
     }
     
-    // رسالة خروج
-    if (appData.exit_message) {
-      content += `<script>window.addEventListener('beforeunload', function(e) { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
-    }
-    
-    // فحص التحديث والإشعارات - بدون أخطاء
     content += `
 <script>
 (function() {
     var _appVersion = ${parseInt(appData.version) || 1};
     var _lastNotifId = 0;
-    
-    // فحص التحديث
     setInterval(function() {
         try {
             fetch('${apiBase}/api/check-update/${req.params.id}')
@@ -121,8 +109,6 @@ app.get('/api/app-content/:id', async (req, res) => {
                 .catch(function() {});
         } catch(e) {}
     }, 30000);
-    
-    // فحص الإشعارات
     setInterval(function() {
         try {
             fetch('${apiBase}/api/notifications/${req.params.id}')
@@ -135,12 +121,6 @@ app.get('/api/app-content/:id', async (req, res) => {
                             if (${appData.notification_enabled ? 'true' : 'false'}) {
                                 if (last.type === 'in-app' || last.type === 'both') {
                                     alert('📢 ' + last.title + '\\n\\n' + last.message);
-                                }
-                                if (last.sound === 'beep') {
-                                    try {
-                                        var audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAA=');
-                                        audio.play();
-                                    } catch(e) {}
                                 }
                             }
                         }
@@ -161,11 +141,8 @@ app.get('/api/app-content/:id', async (req, res) => {
 app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message, type, sound } = req.body;
-    await pool.query(
-      'INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)',
-      [req.params.id, title, message, type, sound]
-    );
-    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
+    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
+    res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -295,7 +272,7 @@ app.post('/api/build/:id', async (req, res) => {
 </html>`;
     
     fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
-    fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
+    fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">App</string></resources>`);
     
     let hasIcon = false;
     if (appData.icon_url) {
@@ -310,7 +287,7 @@ app.post('/api/build/:id', async (req, res) => {
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+    <application android:label="App"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
