@@ -21,6 +21,8 @@
         .app-desc { font-size: 11px; color: #888; margin-top: 3px; }
         .app-status { font-size: 10px; padding: 3px 10px; border-radius: 10px; display: inline-block; margin-top: 5px; }
         .status-completed { background: #d4edda; color: #155724; }
+        .status-building { background: #cce5ff; color: #004085; }
+        .status-failed { background: #f8d7da; color: #721c24; }
         .app-actions { display: flex; gap: 5px; }
         .btn { padding: 8px 10px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 600; border: none; cursor: pointer; }
         .btn-notify { background: #ff9800; color: white; }
@@ -33,7 +35,8 @@
         .theme-modal.show { display: flex; }
         .theme-content { background: white; border-radius: 20px; padding: 25px; max-width: 380px; width: 90%; }
         .theme-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; text-align: center; }
-        .theme-option { padding: 14px; border: 2px solid #ddd; border-radius: 12px; cursor: pointer; margin-bottom: 10px; text-align: center; font-weight: 600; }
+        .theme-option { padding: 14px; border: 2px solid #ddd; border-radius: 12px; cursor: pointer; margin-bottom: 10px; text-align: center; font-weight: 600; font-size: 14px; }
+        .theme-option:hover { border-color: #667eea; }
         body.theme-dark { background: #1a1a2e; }
         body.theme-dark .navbar { background: #16213e; }
         body.theme-dark .app-card { background: #16213e; }
@@ -46,16 +49,20 @@
         body.theme-elegant .navbar { background: #fff8f0; }
         body.theme-elegant .app-card { background: #fff; border: 1px solid #e8d5b5; border-radius: 0; }
         body.theme-elegant .nav-btn.active { background: #c9a86c; }
+        body.theme-elegant .app-name { color: #8b6914; }
         body.theme-amazing { background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4); background-size: 400% 400%; animation: gradientBG 15s ease infinite; }
         @keyframes gradientBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
         body.theme-amazing .navbar { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); }
         body.theme-amazing .app-card { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-radius: 20px; }
+        body.theme-amazing .nav-btn.active { background: linear-gradient(135deg, #ff6b6b, #4ecdc4); border-radius: 25px; }
         body.theme-modern { background: #0a0a0a; font-family: Inter, sans-serif; }
         body.theme-modern .navbar { background: #111; border-bottom: 1px solid #333; }
         body.theme-modern .app-card { background: #111; border: 1px solid #333; border-radius: 0; }
         body.theme-modern .app-name { color: #00ff88; }
+        body.theme-modern .nav-btn { border-radius: 0; letter-spacing: 1px; text-transform: uppercase; font-size: 12px; }
         body.theme-modern .nav-btn.active { background: #00ff88; color: #000; }
         body.theme-modern .settings-gear { background: #111; color: #00ff88; border: 1px solid #333; }
+        body.theme-modern .btn { border-radius: 0; }
     </style>
 </head>
 <body>
@@ -72,7 +79,6 @@
         </div>
     </div>
     <nav class="navbar">
-        <span style="font-size:16px;font-weight:700;color:#667eea;"></span>
         <div class="nav-buttons">
             <a href="/create.html" class="nav-btn inactive">إنشاء</a>
             <a href="/my-apps.html" class="nav-btn active">تطبيقاتي</a>
@@ -99,7 +105,7 @@
                         <div class="app-info">
                             <div class="app-name">${app.name}</div>
                             ${app.description ? `<div class="app-desc">${app.description}</div>` : ''}
-                            <span class="app-status status-completed">${app.status}</span>
+                            <span class="app-status status-${app.status}">${app.status}</span>
                         </div>
                         <div class="app-actions">
                             <button class="btn btn-notify" onclick="openNotify(${app.id})">🔔</button>
@@ -111,7 +117,25 @@
                 `).join('');
             } catch (error) { document.getElementById('appsList').innerHTML = '<div class="empty">❌ فشل</div>'; }
         }
-        async function deleteApp(id) { if (!confirm('⚠️ متأكد؟')) return; await fetch(`${API_URL}/api/apps/${id}`, { method: 'DELETE' }); loadApps(); }
+        
+        function openNotify(appId) {
+            const title = prompt('عنوان الإشعار:');
+            if (!title) return;
+            const message = prompt('نص الإشعار:');
+            if (!message) return;
+            fetch(`${API_URL}/api/notify/${appId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, message })
+            }).then(r => r.json()).then(d => alert('✅ تم الإرسال!'));
+        }
+        
+        async function deleteApp(id) {
+            if (!confirm('⚠️ متأكد من الحذف؟')) return;
+            await fetch(`${API_URL}/api/apps/${id}`, { method: 'DELETE' });
+            loadApps();
+        }
+        
         loadApps();
     </script>
 </body>
