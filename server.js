@@ -51,7 +51,7 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// محتوى التطبيق مع التحديث اللحظي للمحتوى + فحص الإصدار
+// محتوى التطبيق مع فحص الإصدار
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
@@ -67,7 +67,6 @@ app.get('/api/app-content/:id', async (req, res) => {
       content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${content}</body></html>`;
     }
 
-    // سكربت فحص الإصدار والإشعارات
     content += `
 <script>
 (function() {
@@ -86,7 +85,7 @@ app.get('/api/app-content/:id', async (req, res) => {
                     overlay.innerHTML = '<div style="background:#fff;border-radius:15px;padding:25px;text-align:center;max-width:300px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.5);">' +
                         '<div style="font-size:40px;">🔄</div>' +
                         '<h3 style="margin:10px 0;color:#333;">يوجد إصدار جديد!</h3>' +
-                        '<p style="color:#666;font-size:13px;margin-bottom:15px;">تم تحديث الاسم أو الأيقونة.<br>يرجى تحميل النسخة الأحدث.</p>' +
+                        '<p style="color:#666;font-size:13px;margin-bottom:15px;">تم تحديث التطبيق.<br>يرجى تحميل النسخة الأحدث.</p>' +
                         '<a href="${apiBase}' + d.latest_apk_url + '" style="display:inline-block;padding:12px 30px;background:#667eea;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">⬇️ تحديث الآن</a>' +
                         '<br><button onclick="this.parentElement.parentElement.remove()" style="margin-top:10px;background:none;border:none;color:#999;font-size:12px;cursor:pointer;">لاحقًا</button>' +
                         '</div>';
@@ -167,7 +166,7 @@ app.get('/api/apps/:id', async (req, res) => {
   try { const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]); if (r.rows.length===0) return res.status(404).json({error:'Not found'}); res.json({success:true, app:r.rows[0]}); } catch (e) { res.status(500).json({error:e.message}); }
 });
 
-// تعديل التطبيق: نزيد الإصدار فقط إذا تغير الاسم أو الأيقونة أو الباكدج
+// تعديل التطبيق: يحدد ما إذا كان تغيير محتوى أم إصدار جديد
 app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -178,7 +177,7 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     const { name, package_name, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
 
-    // تحديد ما إذا كان هناك تغيير يتطلب إصدارًا جديدًا
+    // تحديد التغييرات
     const nameChanged = name && name !== oldData.name;
     const packageChanged = package_name && package_name !== oldData.package_name;
     const iconChanged = !!icon_url;
@@ -209,7 +208,12 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
       await pool.query('UPDATE apps SET icon_url=$1 WHERE id=$2', [icon_url, id]);
     }
 
-    res.json({ success: true, message: needsNewVersion ? '✅ تم الحفظ! سيظهر إشعار تحديث للمستخدمين.' : '✅ تم الحفظ! المحتوى اتحدث لحظياً.' });
+    let message = '✅ تم التحديث اللحظي!';
+    if (needsNewVersion) {
+      message = '✅ تم الحفظ! سيظهر إشعار إصدار جديد للمستخدمين.';
+    }
+
+    res.json({ success: true, message: message, needsNewVersion: needsNewVersion });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -219,7 +223,7 @@ app.delete('/api/apps/:id', async (req, res) => {
   try { await pool.query('DELETE FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// بناء APK مع المحتوى اللحظي
+// بناء APK
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
@@ -233,7 +237,7 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
 
-    // المحتوى الرئيسي داخل APK هو iframe يشير إلى السيرفر، ليحدث دائماً
+    // المحتوى داخل APK يشير للسيرفر دائماً
     const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
     fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
