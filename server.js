@@ -8,7 +8,6 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// إعداد multer لحفظ الأيقونات
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, 'uploads');
@@ -33,20 +32,10 @@ const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized
 
 async function initDB() {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS apps (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        package_name VARCHAR(255) NOT NULL,
-        app_type VARCHAR(50) NOT NULL DEFAULT 'html',
-        content TEXT,
-        icon_url TEXT,
-        apk_url TEXT,
-        status VARCHAR(50) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+    await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())`);
     await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS icon_url TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS apk_url TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -54,27 +43,27 @@ async function initDB() {
 }
 initDB();
 
-app.get('/', (req, res) => {
-  res.json({ status: 'running', service: 'APK Builder' });
-});
+// إنشاء keystore مرة واحدة
+const keystorePath = path.join(__dirname, 'debug.keystore');
+if (!fs.existsSync(keystorePath)) {
+  exec(`keytool -genkey -v -keystore ${keystorePath} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"`, (err) => {
+    if (err) console.error('Keystore error:', err.message);
+    else console.log('✅ Keystore created');
+  });
+}
+
+app.get('/', (req, res) => res.json({ status: 'running' }));
 
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
-    console.log('📥 Received:', req.body);
-    console.log('📸 File:', req.file);
-    
     const { name, package_name, app_type, content } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    
     const result = await pool.query(
       'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [name, package_name, app_type, content, icon_url]
     );
-    
-    console.log('✅ App created with icon:', icon_url);
     res.json({ success: true, app: result.rows[0] });
   } catch (e) {
-    console.error('Create error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -98,19 +87,6 @@ app.get('/api/apps/:id', async (req, res) => {
   }
 });
 
-app.put('/api/apps/:id', async (req, res) => {
-  try {
-    const { name, content, app_type } = req.body;
-    const result = await pool.query(
-      'UPDATE apps SET name=$1, content=$2, app_type=$3 WHERE id=$4 RETURNING *',
-      [name, content, app_type, req.params.id]
-    );
-    res.json({ success: true, app: result.rows[0] });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
@@ -124,6 +100,7 @@ app.post('/api/build/:id', async (req, res) => {
     const appDir = path.join(__dirname, 'builds', String(id));
     
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
+    fs.mkdirSync(`${appDir}/res/mipmap`, { recursive: true });
     
     let htmlContent = appData.content;
     if (appData.app_type === 'webview') {
@@ -132,11 +109,10 @@ app.post('/api/build/:id', async (req, res) => {
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     
-    // إضافة الأيقونة لو موجودة
+    // نسخ الأيقونة كـ PNG
     if (appData.icon_url) {
       const iconPath = path.join(__dirname, appData.icon_url);
       if (fs.existsSync(iconPath)) {
-        fs.mkdirSync(`${appDir}/res/mipmap`, { recursive: true });
         fs.copyFileSync(iconPath, `${appDir}/res/mipmap/ic_launcher.png`);
       }
     }
@@ -145,7 +121,7 @@ app.post('/api/build/:id', async (req, res) => {
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="${appData.name}" android:icon="@mipmap/ic_launcher" android:usesCleartextTraffic="true">
+    <application android:label="${appData.name}" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -173,12 +149,12 @@ public class MainActivity extends Activity {
 }`);
     
     const buildCmd = `cd ${appDir} && \
-    javac -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java && \
+    javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
     $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
-    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets -R res && \
+    $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets && \
     $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
     $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
-    keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true && \
+    cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null; \
     $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android app-final.apk && \
     cp app-final.apk final.apk`;
     
@@ -203,16 +179,6 @@ app.get('/api/build-status/:id', async (req, res) => {
     const result = await pool.query('SELECT status, apk_url FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/download/:id', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0 || !result.rows[0].apk_url) return res.status(404).json({ error: 'Not found' });
-    res.download(path.join(__dirname, result.rows[0].apk_url), `${result.rows[0].name}.apk`);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
