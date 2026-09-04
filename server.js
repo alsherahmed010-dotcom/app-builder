@@ -94,12 +94,11 @@ app.post('/api/build/:id', async (req, res) => {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
     const appData = result.rows[0];
     
-    const safeName = (appData.package_name || 'com.app.' + appData.name.toLowerCase()).replace(/[^a-z0-9.]/g, '');
+    const safeName = (appData.package_name || 'com.app.app').replace(/[^a-z0-9.]/g, '');
     const appDir = path.join(__dirname, 'builds', String(id));
+    const className = 'MainActivity';
     
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
-    const javaDir = `${appDir}/java/${safeName.replace(/\./g, '/')}`;
-    fs.mkdirSync(javaDir, { recursive: true });
     
     let htmlContent = appData.content;
     if (appData.app_type === 'webview') {
@@ -122,8 +121,7 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
-    const javaFile = `${javaDir}/MainActivity.java`;
-    fs.writeFileSync(javaFile, `package ${safeName};
+    fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.WebView;
@@ -141,23 +139,21 @@ public class MainActivity extends Activity {
 }`);
     
     const buildCmd = `cd ${appDir} && \
-    mkdir -p classes && \
-    javac -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d classes ${javaFile} && \
-    cd classes && find . -name "*.class" > ../classes.txt && cd .. && \
-    $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . $(cat classes.txt) && \
+    javac -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java && \
+    $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
     $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets && \
     $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
     $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
     keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true && \
     $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android app-final.apk && \
-    cp app-final.apk ${safeName}.apk`;
+    cp app-final.apk final.apk`;
     
     exec(buildCmd, { timeout: 120000 }, async (err, stdout, stderr) => {
       if (err) {
         console.error('Build error:', stderr || err.message);
         await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
       } else {
-        const apkUrl = `/builds/${id}/${safeName}.apk`;
+        const apkUrl = `/builds/${id}/final.apk`;
         await pool.query('UPDATE apps SET apk_url=$1, status=$2 WHERE id=$3', [apkUrl, 'completed', id]);
         console.log(`✅ Build completed: ${apkUrl}`);
       }
