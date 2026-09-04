@@ -2,11 +2,17 @@ const express = require('express');
 const { exec } = require('child_process');
 const { Pool } = require('pg');
 const multer = require('multer');
+const admin = require('firebase-admin');
 const app = express();
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+
+// تهيئة Firebase
+const serviceAccount = require('./firebase-key.json');
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+console.log('✅ Firebase initialized');
 
 const uploadDir = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -23,7 +29,6 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/builds', express.static('builds'));
 app.use('/uploads', express.static('uploads'));
-app.use('/libs', express.static('libs'));
 
 const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
 const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
@@ -77,13 +82,58 @@ if (!fs.existsSync(keystorePath)) {
   });
 }
 
-app.get('/', (req, res) => res.json({ status: 'running' }));
+app.get('/', (req, res) => res.json({ status: 'running', firebase: 'connected' }));
 
+// إرسال إشعار FCM حقيقي
 app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message, type, sound } = req.body;
+    
     await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
-    res.json({ success: true, message: '✅ تم الإرسال!' });
+    
+    const appResult = await pool.query('SELECT fcm_token, name FROM apps WHERE id = $1', [req.params.id]);
+    const appData = appResult.rows[0];
+    
+    if (appData.fcm_token) {
+      const fcmMessage = {
+        token: appData.fcm_token,
+        notification: {
+          title: title,
+          body: message
+        },
+        data: {
+          type: type || 'in-app',
+          title: title,
+          message: message,
+          sound: sound || 'default'
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            sound: sound === 'silent' ? null : sound === 'beep' ? 'beep' : 'default',
+            channelId: 'default'
+          }
+        }
+      };
+      
+      await admin.messaging().send(fcmMessage);
+      console.log(`📢 FCM sent to ${appData.name}`);
+      res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
+    } else {
+      res.json({ success: true, message: '✅ تم الحفظ! (لا يوجد مستخدمين مسجلين بعد)' });
+    }
+  } catch (e) {
+    console.error('FCM error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// تسجيل FCM token
+app.post('/api/register-token/:id', async (req, res) => {
+  try {
+    const { token } = req.body;
+    await pool.query('UPDATE apps SET fcm_token = $1 WHERE id = $2', [token, req.params.id]);
+    res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -103,11 +153,7 @@ app.get('/api/app-content/:id', async (req, res) => {
     }
     
     if (appData.admob_enabled && appData.admob_banner_id) {
-      content += `
-<style>.admob-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; }</style>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>
-<ins class="adsbygoogle admob-banner" style="display:block" data-ad-client="${appData.admob_banner_id}" data-ad-format="auto" data-full-width-responsive="true"></ins>
-<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
+      content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>`;
     }
     
     content += `
@@ -116,36 +162,32 @@ app.get('/api/app-content/:id', async (req, res) => {
     var _appVersion = ${parseInt(appData.version) || 1};
     var _lastNotifId = 0;
     setInterval(function() {
-        try {
-            fetch('${apiBase}/api/check-update/${req.params.id}')
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    if (data.version > _appVersion && data.latest_apk_url) {
-                        if (confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟')) {
-                            window.open('${apiBase}' + data.latest_apk_url, '_blank');
-                        }
+        fetch('${apiBase}/api/check-update/${req.params.id}')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.version > _appVersion && data.latest_apk_url) {
+                    if (confirm('🔄 يوجد تحديث جديد!\\n\\nتحميل الآن؟')) {
+                        window.open('${apiBase}' + data.latest_apk_url, '_blank');
                     }
-                })
-                .catch(function() {});
-        } catch(e) {}
+                }
+            })
+            .catch(function() {});
     }, 30000);
     setInterval(function() {
-        try {
-            fetch('${apiBase}/api/notifications/${req.params.id}')
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    if (data.notifications && data.notifications.length > 0) {
-                        var last = data.notifications[0];
-                        if (last.id !== _lastNotifId) {
-                            _lastNotifId = last.id;
-                            if (${appData.notification_enabled ? 'true' : 'false'}) {
-                                alert('📢 ' + last.title + '\\n\\n' + last.message);
-                            }
+        fetch('${apiBase}/api/notifications/${req.params.id}')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.notifications && data.notifications.length > 0) {
+                    var last = data.notifications[0];
+                    if (last.id !== _lastNotifId) {
+                        _lastNotifId = last.id;
+                        if (${appData.notification_enabled ? 'true' : 'false'}) {
+                            alert('📢 ' + last.title + '\\n\\n' + last.message);
                         }
                     }
-                })
-                .catch(function() {});
-        } catch(e) {}
+                }
+            })
+            .catch(function() {});
     }, 10000);
 })();
 </script>`;
@@ -266,14 +308,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
-    fs.mkdirSync(`${appDir}/libs`, { recursive: true });
-    
-    // نسخ مكتبة AdMob
-    const admobSource = path.join(__dirname, 'libs', 'play-services-ads.jar');
-    if (fs.existsSync(admobSource)) {
-      fs.copyFileSync(admobSource, `${appDir}/libs/play-services-ads.jar`);
-      console.log('✅ AdMob library copied');
-    }
     
     const liveHtml = `<!DOCTYPE html>
 <html>
