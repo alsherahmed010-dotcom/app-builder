@@ -29,32 +29,28 @@ const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized
 
 async function initDB() {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS apps (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        package_name VARCHAR(255) NOT NULL,
-        app_type VARCHAR(50) DEFAULT 'html',
-        content TEXT,
-        icon_url TEXT,
-        apk_url TEXT,
-        status VARCHAR(50) DEFAULT 'pending',
-        description TEXT,
-        fps INTEGER DEFAULT 120,
-        welcome_message TEXT,
-        exit_message TEXT,
-        notification_enabled BOOLEAN DEFAULT false,
-        admob_enabled BOOLEAN DEFAULT false,
-        admob_banner_id TEXT,
-        admob_interstitial_id TEXT,
-        version INTEGER DEFAULT 1,
-        latest_apk_url TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS latest_apk_url TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS apps (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      package_name VARCHAR(255) NOT NULL,
+      app_type VARCHAR(50) DEFAULT 'html',
+      content TEXT,
+      icon_url TEXT,
+      apk_url TEXT,
+      status VARCHAR(50) DEFAULT 'pending',
+      description TEXT,
+      fps INTEGER DEFAULT 120,
+      welcome_message TEXT,
+      exit_message TEXT,
+      notification_enabled BOOLEAN DEFAULT false,
+      admob_enabled BOOLEAN DEFAULT false,
+      admob_banner_id TEXT,
+      admob_interstitial_id TEXT,
+      version INTEGER DEFAULT 1,
+      latest_apk_url TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -72,7 +68,6 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// API للتحقق من التحديثات
 app.get('/api/check-update/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT version, latest_apk_url, name FROM apps WHERE id = $1', [req.params.id]);
@@ -83,7 +78,6 @@ app.get('/api/check-update/:id', async (req, res) => {
   }
 });
 
-// API للمحتوى المباشر مع إعلانات ورسائل
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -92,43 +86,33 @@ app.get('/api/app-content/:id', async (req, res) => {
     const appData = result.rows[0];
     let content = appData.content;
     
-    // رسالة ترحيب
     if (appData.welcome_message) {
       content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
     }
     
-    // رسالة خروج
     if (appData.exit_message) {
       content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
     }
     
-    // إعلانات AdMob حقيقية
     if (appData.admob_enabled && appData.admob_banner_id) {
-      const clientId = appData.admob_banner_id.split('/')[0];
-      content += `
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${clientId}" crossorigin="anonymous"></script>
-<ins class="adsbygoogle" style="display:block" data-ad-client="${clientId}" data-ad-format="auto" data-full-width-responsive="true"></ins>
-<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
+      content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>`;
     }
     
-    // إضافة كود فحص التحديث
-    content += `
-<script>
-setInterval(async () => {
-    try {
-        const res = await fetch('${req.protocol}://${req.get('host')}/api/check-update/${req.params.id}');
-        const data = await res.json();
-        if (data.latest_apk_url && data.latest_apk_url !== window._currentApk) {
-            window._currentApk = data.latest_apk_url;
-            if (confirm('🔄 يوجد تحديث جديد! هل تريد تحميله؟')) {
-                window.open('${req.protocol}://${req.get('host')}' + data.latest_apk_url, '_blank');
-            }
-        }
-    } catch(e) {}
-}, 60000);
-</script>`;
-    
     res.send(content);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// إرسال إشعار
+app.post('/api/notify/:id', async (req, res) => {
+  try {
+    const { title, message } = req.body;
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    
+    console.log(`📢 Notification sent to app ${result.rows[0].name}: ${title} - ${message}`);
+    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -142,7 +126,7 @@ app.post('/api/apps', upload.single('icon'), async (req, res) => {
     const result = await pool.query(
       `INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) 
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [name, package_name, app_type, content, icon_url, description, fps || 120, welcome_message, exit_message, notification_enabled === 'true' || notification_enabled === true, admob_enabled === 'true' || admob_enabled === true, admob_banner_id, admob_interstitial_id]
+      [name, package_name, app_type, content, icon_url, description, parseInt(fps) || 120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]
     );
     res.json({ success: true, app: result.rows[0] });
   } catch (e) {
@@ -171,23 +155,42 @@ app.get('/api/apps/:id', async (req, res) => {
 
 app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
   try {
+    const id = parseInt(req.params.id);
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     
-    let query = `UPDATE apps SET name=$1, package_name=$2, app_type=$3, content=$4, description=$5, fps=$6, welcome_message=$7, exit_message=$8, notification_enabled=$9, admob_enabled=$10, admob_banner_id=$11, admob_interstitial_id=$12, version=version+1, updated_at=NOW()`;
-    const params = [name, package_name, app_type, content, description, fps || 120, welcome_message, exit_message, notification_enabled === 'true' || notification_enabled === true, admob_enabled === 'true' || admob_enabled === true, admob_banner_id, admob_interstitial_id];
+    const result = await pool.query(
+      `UPDATE apps SET 
+        name = COALESCE($1, name),
+        package_name = COALESCE($2, package_name),
+        app_type = COALESCE($3, app_type),
+        content = COALESCE($4, content),
+        description = COALESCE($5, description),
+        fps = COALESCE($6, fps),
+        welcome_message = COALESCE($7, welcome_message),
+        exit_message = COALESCE($8, exit_message),
+        notification_enabled = COALESCE($9, notification_enabled),
+        admob_enabled = COALESCE($10, admob_enabled),
+        admob_banner_id = COALESCE($11, admob_banner_id),
+        admob_interstitial_id = COALESCE($12, admob_interstitial_id),
+        version = version + 1,
+        updated_at = NOW()
+      WHERE id = $13 RETURNING *`,
+      [name, package_name, app_type, content, description, parseInt(fps) || 120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, id]
+    );
+    
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    
+    let updatedApp = result.rows[0];
     
     if (icon_url) {
-      query += `, icon_url=$13`;
-      params.push(icon_url);
+      const iconUpdate = await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2 RETURNING *', [icon_url, id]);
+      updatedApp = iconUpdate.rows[0];
     }
     
-    query += ` WHERE id=$14 RETURNING *`;
-    params.push(req.params.id);
-    
-    const result = await pool.query(query, params);
-    res.json({ success: true, app: result.rows[0], message: '✅ تم الحفظ! التعديلات ستظهر فورًا.' });
+    res.json({ success: true, app: updatedApp, message: '✅ تم الحفظ!' });
   } catch (e) {
+    console.error('Update error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -217,7 +220,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // التطبيق بيجيب المحتوى من السيرفر (تحديث لحظي)
     const liveHtml = `<!DOCTYPE html>
 <html>
 <head>
