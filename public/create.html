@@ -3,90 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>إنشاء تطبيق جديد</title>
+    <title>إنشاء تطبيق</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        h1 { text-align: center; color: #333; margin-bottom: 30px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
-        input, textarea, select { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; }
-        textarea { min-height: 200px; font-family: monospace; }
-        .type-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
-        .type-btn { flex: 1; padding: 15px; text-align: center; border: 3px solid #ddd; border-radius: 10px; cursor: pointer; transition: all 0.3s; }
-        .type-btn.active { border-color: #667eea; background: #667eea10; }
-        .type-btn .icon { font-size: 2em; display: block; }
-        .submit-btn { width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 10px; font-size: 1.2em; font-weight: bold; cursor: pointer; }
-        .submit-btn:hover { opacity: 0.9; }
-        .back-link { display: block; text-align: center; margin-top: 20px; color: #667eea; text-decoration: none; }
-        #htmlContent { display: none; }
-        #urlContent { display: none; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fa; min-height: 100vh; }
+        
+        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .nav-buttons { display: flex; gap: 10px; }
+        .nav-btn { padding: 8px 20px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
+        .nav-btn.active { background: #667eea; color: white; }
+        .nav-btn.inactive { background: #f0f0f0; color: #555; }
+        
+        .container { max-width: 600px; margin: 30px auto; padding: 20px; }
+        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; }
+        textarea { min-height: 150px; font-family: monospace; font-size: 12px; }
+        .type-buttons { display: flex; gap: 8px; margin-bottom: 15px; }
+        .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+        .type-btn.active { border-color: #667eea; background: #f0f3ff; color: #667eea; }
+        .submit-btn { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .submit-btn:hover { background: #5568d3; }
+        .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .build-logs { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .log-line { margin-bottom: 3px; }
+        .log-success { color: #4ec9b0; }
+        .log-error { color: #f48771; }
+        .log-info { color: #569cd6; }
+        
+        .download-btn { display: none; width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 15px; text-align: center; text-decoration: none; }
+        .download-btn.show { display: block; }
+        
+        .loading { text-align: center; padding: 20px; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+    <nav class="navbar">
+        <span style="font-size:16px;font-weight:700;color:#667eea;">📱 App Builder</span>
+        <div class="nav-buttons">
+            <a href="/" class="nav-btn active">إنشاء</a>
+            <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
+        </div>
+    </nav>
     <div class="container">
-        <h1>➕ إنشاء تطبيق جديد</h1>
-        <form id="createForm">
-            <div class="form-group">
-                <label>📝 اسم التطبيق</label>
-                <input type="text" id="appName" required placeholder="مثال: تطبيقي الأول">
-            </div>
-            <div class="form-group">
-                <label>📦 الباكدج نيم (Package Name)</label>
-                <input type="text" id="packageName" required placeholder="com.example.myapp">
-            </div>
-            <div class="form-group">
-                <label>🖼️ أيقونة التطبيق (PNG)</label>
-                <input type="file" id="appIcon" accept="image/png">
-            </div>
-            <div class="type-buttons">
-                <div class="type-btn active" id="htmlBtn" onclick="selectType('html')">
-                    <span class="icon">💻</span>
-                    HTML
-                </div>
-                <div class="type-btn" id="webviewBtn" onclick="selectType('webview')">
-                    <span class="icon">🌐</span>
-                    WebView
-                </div>
-            </div>
-            <div id="htmlContent" style="display:block;">
+        <div class="card" id="createFormCard">
+            <h3 style="font-size:16px;margin-bottom:20px;color:#333;">➕ إنشاء تطبيق جديد</h3>
+            <form id="createForm">
                 <div class="form-group">
-                    <label>📄 كود HTML</label>
-                    <textarea id="htmlCode" placeholder="<!DOCTYPE html>..."></textarea>
+                    <label>📝 اسم التطبيق</label>
+                    <input type="text" id="appName" required placeholder="مثال: تطبيقي">
                 </div>
-            </div>
-            <div id="urlContent">
                 <div class="form-group">
-                    <label>🔗 رابط الموقع</label>
-                    <input type="url" id="appUrl" placeholder="https://example.com">
+                    <label>📦 الباكدج نيم</label>
+                    <input type="text" id="packageName" required placeholder="com.example.app">
                 </div>
+                <div class="form-group">
+                    <label>🖼️ الأيقونة (PNG)</label>
+                    <input type="file" id="appIcon" accept="image/png" style="padding:8px;">
+                </div>
+                <div class="type-buttons">
+                    <div class="type-btn active" id="htmlBtn" onclick="selectType('html')">💻 HTML</div>
+                    <div class="type-btn" id="webviewBtn" onclick="selectType('webview')">🌐 WebView</div>
+                </div>
+                <div id="htmlSection">
+                    <div class="form-group">
+                        <label>📄 كود HTML</label>
+                        <textarea id="htmlCode" placeholder="<!DOCTYPE html>..."></textarea>
+                    </div>
+                </div>
+                <div id="urlSection" style="display:none;">
+                    <div class="form-group">
+                        <label>🔗 رابط الموقع</label>
+                        <input type="url" id="appUrl" placeholder="https://example.com">
+                    </div>
+                </div>
+                <button type="submit" class="submit-btn" id="submitBtn">🚀 إنشاء وبناء التطبيق</button>
+            </form>
+        </div>
+        
+        <div class="card" id="buildCard" style="display:none;">
+            <h3 style="font-size:16px;margin-bottom:15px;color:#333;">🔨 جاري البناء...</h3>
+            <div class="loading">
+                <div class="spinner"></div>
+                <p style="font-size:12px;color:#888;">يتم بناء التطبيق، انتظر...</p>
             </div>
-            <button type="submit" class="submit-btn">🚀 إنشاء التطبيق</button>
-        </form>
-        <a href="/" class="back-link">→ الرجوع للرئيسية</a>
+            <div class="build-logs" id="buildLogs">
+                <div class="log-line log-info">[INFO] بدء عملية البناء...</div>
+            </div>
+            <a href="#" class="download-btn" id="downloadBtn">⬇️ تحميل التطبيق APK</a>
+        </div>
     </div>
     <script>
-        const API_URL = window.location.origin;
+        const API_URL = 'https://app-builder-production-ab4d.up.railway.app';
         let appType = 'html';
         
         function selectType(type) {
             appType = type;
-            if (type === 'html') {
-                document.getElementById('htmlBtn').classList.add('active');
-                document.getElementById('webviewBtn').classList.remove('active');
-                document.getElementById('htmlContent').style.display = 'block';
-                document.getElementById('urlContent').style.display = 'none';
-            } else {
-                document.getElementById('webviewBtn').classList.add('active');
-                document.getElementById('htmlBtn').classList.remove('active');
-                document.getElementById('htmlContent').style.display = 'none';
-                document.getElementById('urlContent').style.display = 'block';
-            }
+            document.getElementById('htmlBtn').classList.toggle('active', type === 'html');
+            document.getElementById('webviewBtn').classList.toggle('active', type === 'webview');
+            document.getElementById('htmlSection').style.display = type === 'html' ? 'block' : 'none';
+            document.getElementById('urlSection').style.display = type === 'webview' ? 'block' : 'none';
+        }
+        
+        function addLog(message, type = 'info') {
+            const logs = document.getElementById('buildLogs');
+            const div = document.createElement('div');
+            div.className = `log-line log-${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
         }
         
         document.getElementById('createForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ جاري الإنشاء...';
+            
             const formData = new FormData();
             formData.append('name', document.getElementById('appName').value);
             formData.append('package_name', document.getElementById('packageName').value);
@@ -99,26 +136,58 @@
             }
             
             const iconFile = document.getElementById('appIcon').files[0];
-            if (iconFile) {
-                formData.append('icon', iconFile);
-            }
+            if (iconFile) formData.append('icon', iconFile);
             
             try {
-                const response = await fetch(`${API_URL}/api/apps`, {
-                    method: 'POST',
-                    body: formData
-                });
+                const response = await fetch(`${API_URL}/api/apps`, { method: 'POST', body: formData });
                 const data = await response.json();
+                
                 if (data.success) {
-                    alert('✅ تم إنشاء التطبيق بنجاح!');
-                    window.location.href = '/my-apps.html';
+                    addLog('✅ تم إنشاء التطبيق بنجاح!', 'success');
+                    addLog(`🆔 رقم التطبيق: ${data.app.id}`, 'info');
+                    
+                    document.getElementById('createFormCard').style.display = 'none';
+                    document.getElementById('buildCard').style.display = 'block';
+                    
+                    await startBuild(data.app.id);
                 } else {
-                    alert('❌ حدث خطأ');
+                    addLog('❌ فشل إنشاء التطبيق', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '🚀 إنشاء وبناء التطبيق';
                 }
             } catch (error) {
-                alert('❌ فشل الاتصال بالسيرفر');
+                addLog('❌ فشل الاتصال بالسيرفر', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 إنشاء وبناء التطبيق';
             }
         });
+        
+        async function startBuild(appId) {
+            addLog('🔨 بدء بناء APK...', 'info');
+            addLog('📦 تحميل المكتبات...', 'info');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/build/${appId}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog('✅ تم البناء بنجاح!', 'success');
+                    addLog(`📱 رابط التحميل: ${data.apk_url}`, 'success');
+                    
+                    const downloadBtn = document.getElementById('downloadBtn');
+                    downloadBtn.href = API_URL + data.apk_url;
+                    downloadBtn.classList.add('show');
+                    
+                    document.querySelector('.loading').style.display = 'none';
+                } else {
+                    addLog(`❌ فشل البناء: ${data.error}`, 'error');
+                    document.querySelector('.loading').style.display = 'none';
+                }
+            } catch (error) {
+                addLog('❌ فشل الاتصال بالسيرفر أثناء البناء', 'error');
+                document.querySelector('.loading').style.display = 'none';
+            }
+        }
     </script>
 </body>
 </html>
