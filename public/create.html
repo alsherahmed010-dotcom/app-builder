@@ -7,13 +7,13 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fa; min-height: 100vh; }
-        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
         .nav-buttons { display: flex; gap: 10px; }
         .nav-btn { padding: 8px 20px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
         .nav-btn.active { background: #667eea; color: white; }
         .nav-btn.inactive { background: #f0f0f0; color: #555; }
         .container { max-width: 600px; margin: 30px auto; padding: 20px; }
-        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; }
         input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; }
@@ -22,15 +22,12 @@
         .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .type-btn.active { border-color: #667eea; background: #f0f3ff; color: #667eea; }
         .submit-btn { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-        .build-logs { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; }
+        .build-logs { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; margin-top: 15px; }
         .log-success { color: #4ec9b0; }
         .log-error { color: #f48771; }
         .log-info { color: #569cd6; }
         .download-btn { display: none; width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 15px; text-align: center; text-decoration: none; }
         .download-btn.show { display: block; }
-        .loading { text-align: center; padding: 20px; }
-        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -42,7 +39,7 @@
         </div>
     </nav>
     <div class="container">
-        <div class="card" id="createFormCard">
+        <div class="card">
             <h3 style="font-size:16px;margin-bottom:20px;color:#333;">➕ إنشاء تطبيق جديد</h3>
             <form id="createForm">
                 <div class="form-group">
@@ -51,11 +48,7 @@
                 </div>
                 <div class="form-group">
                     <label>📦 الباكدج نيم</label>
-                    <input type="text" id="packageName" required placeholder="com.ahmed.app">
-                </div>
-                <div class="form-group">
-                    <label>🖼️ الأيقونة (PNG)</label>
-                    <input type="file" id="appIcon" accept="image/png">
+                    <input type="text" id="packageName" required placeholder="com.example.app">
                 </div>
                 <div class="type-buttons">
                     <div class="type-btn active" id="htmlBtn" onclick="selectType('html')">💻 HTML</div>
@@ -64,7 +57,7 @@
                 <div id="htmlSection">
                     <div class="form-group">
                         <label>📄 كود HTML</label>
-                        <textarea id="htmlCode" placeholder="<!DOCTYPE html>..."></textarea>
+                        <textarea id="htmlCode" placeholder="<h1>مرحبا!</h1>"></textarea>
                     </div>
                 </div>
                 <div id="urlSection" style="display:none;">
@@ -73,19 +66,10 @@
                         <input type="url" id="appUrl" placeholder="https://example.com">
                     </div>
                 </div>
-                <button type="submit" class="submit-btn" id="submitBtn">🚀 إنشاء وبناء التطبيق</button>
+                <button type="submit" class="submit-btn" id="submitBtn">🚀 إنشاء التطبيق</button>
             </form>
-        </div>
-        <div class="card" id="buildCard" style="display:none;">
-            <h3 style="font-size:16px;margin-bottom:15px;color:#333;">🔨 جاري البناء...</h3>
-            <div class="loading" id="loadingIndicator">
-                <div class="spinner"></div>
-                <p style="font-size:12px;color:#888;">يتم بناء التطبيق، انتظر...</p>
-            </div>
-            <div class="build-logs" id="buildLogs">
-                <div class="log-info">[INFO] بدء عملية البناء...</div>
-            </div>
-            <a href="#" class="download-btn" id="downloadBtn">⬇️ تحميل التطبيق APK</a>
+            <div class="build-logs" id="buildLogs" style="display:none;"></div>
+            <a href="#" class="download-btn" id="downloadBtn">⬇️ تحميل APK</a>
         </div>
     </div>
     <script>
@@ -102,9 +86,10 @@
         
         function addLog(message, type = 'info') {
             const logs = document.getElementById('buildLogs');
+            logs.style.display = 'block';
             const div = document.createElement('div');
             div.className = type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : 'log-info';
-            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            div.textContent = message;
             logs.appendChild(div);
             logs.scrollTop = logs.scrollHeight;
         }
@@ -113,7 +98,7 @@
             e.preventDefault();
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
-            submitBtn.textContent = '⏳ جاري الإنشاء...';
+            submitBtn.textContent = '⏳ جاري...';
             
             const formData = new FormData();
             formData.append('name', document.getElementById('appName').value);
@@ -121,55 +106,53 @@
             formData.append('app_type', appType);
             formData.append('content', appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value);
             
-            const iconFile = document.getElementById('appIcon').files[0];
-            if (iconFile) formData.append('icon', iconFile);
-            
             try {
-                const response = await fetch(`${API_URL}/api/apps`, { method: 'POST', body: formData });
+                addLog('📤 إرسال البيانات...');
+                const response = await fetch(`${API_URL}/api/apps`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
                 const data = await response.json();
                 
                 if (data.success) {
-                    addLog('✅ تم إنشاء التطبيق بنجاح!', 'success');
-                    document.getElementById('createFormCard').style.display = 'none';
-                    document.getElementById('buildCard').style.display = 'block';
+                    addLog('✅ تم الإنشاء!', 'success');
+                    addLog('🔨 بدء البناء...');
                     await startBuild(data.app.id);
+                } else {
+                    addLog('❌ فشل: ' + (data.error || 'خطأ'), 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '🚀 إنشاء التطبيق';
                 }
             } catch (error) {
-                addLog('❌ فشل الاتصال بالسيرفر', 'error');
+                addLog('❌ فشل الاتصال: ' + error.message, 'error');
                 submitBtn.disabled = false;
-                submitBtn.textContent = '🚀 إنشاء وبناء التطبيق';
+                submitBtn.textContent = '🚀 إنشاء التطبيق';
             }
         });
         
         async function startBuild(appId) {
-            addLog('🔨 بدء بناء APK...', 'info');
-            
             try {
                 await fetch(`${API_URL}/api/build/${appId}`, { method: 'POST' });
-                addLog('✅ بدأ البناء في الخلفية!', 'success');
-                addLog('⏳ جاري فحص الحالة...', 'info');
+                addLog('✅ بدأ البناء!');
                 
                 const checkInterval = setInterval(async () => {
                     try {
-                        const statusRes = await fetch(`${API_URL}/api/build-status/${appId}`);
-                        const statusData = await statusRes.json();
+                        const res = await fetch(`${API_URL}/api/build-status/${appId}`);
+                        const data = await res.json();
                         
-                        if (statusData.status === 'completed') {
+                        if (data.status === 'completed') {
                             clearInterval(checkInterval);
-                            addLog('✅ تم البناء بنجاح!', 'success');
+                            addLog('✅ اكتمل البناء!', 'success');
                             const downloadBtn = document.getElementById('downloadBtn');
-                            downloadBtn.href = API_URL + statusData.apk_url;
+                            downloadBtn.href = API_URL + data.apk_url;
                             downloadBtn.classList.add('show');
-                            document.getElementById('loadingIndicator').style.display = 'none';
-                        } else if (statusData.status === 'failed') {
+                        } else if (data.status === 'failed') {
                             clearInterval(checkInterval);
                             addLog('❌ فشل البناء', 'error');
-                            document.getElementById('loadingIndicator').style.display = 'none';
-                        } else {
-                            addLog(`⏳ الحالة: ${statusData.status}`, 'info');
                         }
                     } catch (err) {
-                        addLog('❌ فشل فحص الحالة', 'error');
+                        addLog('⏳ جاري البناء...');
                     }
                 }, 5000);
             } catch (error) {
