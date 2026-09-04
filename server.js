@@ -2,22 +2,32 @@ const express = require('express');
 const { exec } = require('child_process');
 const { Pool } = require('pg');
 const multer = require('multer');
-const admin = require('firebase-admin');
 const app = express();
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// تهيئة Firebase من متغيرات البيئة
-const serviceAccount = {
-  type: "service_account",
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY,
-  client_email: process.env.FIREBASE_CLIENT_EMAIL
-};
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-console.log('✅ Firebase initialized');
+// Firebase - مع إصلاح المفتاح
+const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const admin = require('firebase-admin');
+
+if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        privateKey: privateKey,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL
+      })
+    });
+    console.log('✅ Firebase initialized');
+  } catch (e) {
+    console.error('❌ Firebase init error:', e.message);
+  }
+} else {
+  console.log('⚠️ Firebase env vars not set');
+}
 
 const uploadDir = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -57,7 +67,7 @@ if (!fs.existsSync(keystorePath)) {
   });
 }
 
-app.get('/', (req, res) => res.json({ status: 'running', firebase: 'connected' }));
+app.get('/', (req, res) => res.json({ status: 'running', firebase: admin.apps.length > 0 ? 'connected' : 'not connected' }));
 
 app.post('/api/notify/:id', async (req, res) => {
   try {
@@ -67,7 +77,7 @@ app.post('/api/notify/:id', async (req, res) => {
     const appResult = await pool.query('SELECT fcm_token FROM apps WHERE id = $1', [req.params.id]);
     const fcmToken = appResult.rows[0]?.fcm_token;
     
-    if (fcmToken) {
+    if (fcmToken && admin.apps.length > 0) {
       await admin.messaging().send({
         token: fcmToken,
         notification: { title, body: message },
@@ -76,7 +86,7 @@ app.post('/api/notify/:id', async (req, res) => {
       console.log('📢 FCM sent');
       res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
     } else {
-      res.json({ success: true, message: '✅ تم الحفظ! (لا يوجد مستخدمين بعد)' });
+      res.json({ success: true, message: '✅ تم الحفظ!' });
     }
   } catch (e) {
     console.error('FCM error:', e.message);
