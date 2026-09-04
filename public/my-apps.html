@@ -7,24 +7,24 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
-        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; }
-        .nav-btn { padding: 10px 25px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
         .nav-btn.active { background: #238636; color: white; }
         .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
         .container { max-width: 600px; margin: 30px auto; padding: 20px; }
         .app-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
-        .app-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; overflow: hidden; flex-shrink: 0; background: #21262d; }
+        .app-icon { width: 55px; height: 55px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; overflow: hidden; flex-shrink: 0; background: #21262d; border: 1px solid #30363d; }
         .app-icon img { width: 100%; height: 100%; object-fit: cover; }
         .app-info { flex: 1; }
-        .app-name { font-size: 15px; font-weight: 700; color: #f0f6fc; }
+        .app-name { font-size: 15px; font-weight: 700; }
         .app-desc { font-size: 11px; color: #8b949e; margin-top: 3px; }
         .app-status { font-size: 10px; padding: 3px 12px; border-radius: 10px; display: inline-block; margin-top: 5px; }
         .status-completed { background: #23863630; color: #3fb950; }
         .status-building { background: #1f6feb30; color: #58a6ff; }
         .status-failed { background: #da363330; color: #f85149; }
-        .app-actions { display: flex; gap: 6px; }
-        .btn { padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; border: none; cursor: pointer; }
-        .btn-notify { background: #d29922; color: #fff; }
+        .app-actions { display: flex; gap: 6px; flex-direction: column; }
+        .btn { padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; border: none; cursor: pointer; text-align: center; }
+        .btn-notify { background: #d29922; color: white; }
         .btn-edit { background: #21262d; color: #c9d1d9; }
         .btn-download { background: #238636; color: white; }
         .btn-delete { background: #da363330; color: #f85149; }
@@ -33,8 +33,9 @@
 </head>
 <body>
     <nav class="navbar">
-        <a href="/create.html" class="nav-btn inactive">إنشاء</a>
-        <a href="/my-apps.html" class="nav-btn active">تطبيقاتي</a>
+        <a href="/create.html" class="nav-btn inactive">➕ إنشاء</a>
+        <a href="/ai-html.html" class="nav-btn inactive">🤖 AI HTML</a>
+        <a href="/my-apps.html" class="nav-btn active">📱 تطبيقاتي</a>
     </nav>
     <div class="container">
         <div id="appsList"></div>

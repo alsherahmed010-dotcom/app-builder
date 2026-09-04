@@ -7,13 +7,13 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
-        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; }
-        .nav-btn { padding: 10px 25px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
         .nav-btn.active { background: #238636; color: white; }
         .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
         .container { max-width: 600px; margin: 30px auto; padding: 20px; }
         .card { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 30px 25px; }
-        .card-title { font-size: 20px; font-weight: 800; margin-bottom: 25px; color: #f0f6fc; text-align: center; }
+        .card-title { font-size: 20px; font-weight: 800; margin-bottom: 25px; text-align: center; }
         .form-group { margin-bottom: 18px; }
         label { display: block; font-size: 13px; font-weight: 700; color: #c9d1d9; margin-bottom: 6px; }
         input, textarea { width: 100%; padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; font-size: 14px; color: #e6edf3; font-family: inherit; }
@@ -26,19 +26,17 @@
         .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #30363d; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; }
         .type-btn.active { border-color: #238636; background: #23863620; color: #3fb950; }
         .submit-btn { width: 100%; padding: 14px; background: #238636; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
-        .submit-btn:hover { background: #2ea043; }
+        .submit-btn:disabled { opacity: 0.5; }
         .fps-buttons { display: flex; gap: 8px; }
         .fps-btn { flex: 1; padding: 10px; text-align: center; border: 2px solid #30363d; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700; }
         .fps-btn.active { border-color: #238636; background: #23863620; color: #3fb950; }
-        .checkbox-group { display: flex; align-items: center; gap: 10px; }
-        .checkbox-group input { width: auto; }
-        .checkbox-group label { margin: 0; font-size: 13px; }
     </style>
 </head>
 <body>
     <nav class="navbar">
-        <a href="/create.html" class="nav-btn active">إنشاء</a>
-        <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
+        <a href="/create.html" class="nav-btn active">➕ إنشاء</a>
+        <a href="/ai-html.html" class="nav-btn inactive">🤖 AI HTML</a>
+        <a href="/my-apps.html" class="nav-btn inactive">📱 تطبيقاتي</a>
     </nav>
     <div class="container">
         <div class="card">
@@ -58,10 +56,10 @@
                         <img id="iconPreview" class="icon-preview">
                         <p style="font-size:12px;color:#8b949e;" id="iconText">اضغط لاختيار PNG</p>
                     </div>
-                    <input type="file" id="appIcon" accept="image/png" style="display:none;" onchange="previewIcon(this)">
+                    <input type="file" id="appIcon" accept="image/*" style="display:none;" onchange="previewIcon(this)">
                 </div>
                 <div class="form-group">
-                    <label>📄 وصف التطبيق</label>
+                    <label>📄 وصف</label>
                     <input type="text" id="appDescription" placeholder="وصف مختصر">
                 </div>
                 <div class="form-group">
@@ -75,11 +73,7 @@
                 </div>
                 <div class="form-group">
                     <label>👋 رسالة ترحيب</label>
-                    <input type="text" id="welcomeMsg" placeholder="أهلاً بك!">
-                </div>
-                <div class="form-group">
-                    <label>👋 رسالة خروج</label>
-                    <input type="text" id="exitMsg" placeholder="إلى اللقاء!">
+                    <input type="text" id="welcomeMsg">
                 </div>
                 <div class="type-buttons">
                     <div class="type-btn active" id="htmlBtn" onclick="selectType('html')">💻 HTML</div>
@@ -97,28 +91,6 @@
                         <input type="url" id="appUrl" placeholder="https://example.com">
                     </div>
                 </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="notifEnabled">
-                        <label for="notifEnabled">🔔 الإشعارات</label>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="admobEnabled">
-                        <label for="admobEnabled">💰 AdMob</label>
-                    </div>
-                </div>
-                <div id="admobSection" style="display:none;">
-                    <div class="form-group">
-                        <label>📱 Banner ID</label>
-                        <input type="text" id="admobBanner" placeholder="ca-app-pub-xxx/yyy">
-                    </div>
-                    <div class="form-group">
-                        <label>🎬 Interstitial ID</label>
-                        <input type="text" id="admobInterstitial" placeholder="ca-app-pub-xxx/zzz">
-                    </div>
-                </div>
                 <button type="submit" class="submit-btn" id="submitBtn">🚀 إنشاء التطبيق</button>
             </form>
         </div>
@@ -129,7 +101,6 @@
         let selectedFps = 90;
         function selectType(type) { appType = type; document.getElementById('htmlBtn').classList.toggle('active', type==='html'); document.getElementById('webviewBtn').classList.toggle('active', type==='webview'); document.getElementById('htmlSection').style.display = type==='html' ? 'block' : 'none'; document.getElementById('urlSection').style.display = type==='webview' ? 'block' : 'none'; }
         function selectFps(el, fps) { selectedFps = fps; document.querySelectorAll('.fps-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
-        document.getElementById('admobEnabled').addEventListener('change', function() { document.getElementById('admobSection').style.display = this.checked ? 'block' : 'none'; });
         function previewIcon(input) { const f = input.files[0]; if (f) { const r = new FileReader(); r.onload = e => { document.getElementById('iconPreview').src = e.target.result; document.getElementById('iconPreview').style.display = 'block'; document.getElementById('iconText').textContent = '✅ ' + f.name; }; r.readAsDataURL(f); } }
         document.getElementById('createForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -143,11 +114,6 @@
             fd.append('description', document.getElementById('appDescription').value);
             fd.append('fps', selectedFps);
             fd.append('welcome_message', document.getElementById('welcomeMsg').value);
-            fd.append('exit_message', document.getElementById('exitMsg').value);
-            fd.append('notification_enabled', document.getElementById('notifEnabled').checked);
-            fd.append('admob_enabled', document.getElementById('admobEnabled').checked);
-            fd.append('admob_banner_id', document.getElementById('admobBanner').value);
-            fd.append('admob_interstitial_id', document.getElementById('admobInterstitial').value);
             const icon = document.getElementById('appIcon').files[0];
             if (icon) fd.append('icon', icon);
             try {
