@@ -51,7 +51,40 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// WebView مباشر - يفتح الموقع نفسه
+// صفحة الإصدار
+app.get('/version/:id', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT name, version, apk_url, latest_apk_url FROM apps WHERE id=$1', [req.params.id]);
+    if (r.rows.length === 0) return res.status(404).send('Not found');
+    const appData = r.rows[0];
+    res.send(`
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><title>${appData.name} - الإصدار</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#fff;border-radius:20px;padding:30px;text-align:center;max-width:350px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+h1{font-size:20px;color:#333;margin-bottom:5px}
+.version-badge{display:inline-block;background:#667eea;color:#fff;padding:5px 20px;border-radius:20px;font-size:14px;font-weight:700;margin:10px 0}
+p{color:#666;font-size:13px;line-height:1.8}
+.download-btn{display:inline-block;margin-top:20px;padding:15px 40px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px;box-shadow:0 5px 20px rgba(102,126,234,0.4)}
+.download-btn:hover{transform:translateY(-2px)}
+</style>
+</head>
+<body>
+<div class="card">
+    <h1>📱 ${appData.name}</h1>
+    <div class="version-badge">الإصدار ${appData.version}</div>
+    <p>أحدث إصدار متاح للتحميل</p>
+    <a href="${appData.latest_apk_url || appData.apk_url}" class="download-btn" download>⬇️ تحميل الآن</a>
+</div>
+</body>
+</html>`);
+  } catch (e) { res.status(500).send('Error'); }
+});
+
+// محتوى التطبيق
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
@@ -59,41 +92,49 @@ app.get('/api/app-content/:id', async (req, res) => {
     const appData = r.rows[0];
     const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
 
-    // لو WebView - نعمل redirect للموقع مباشرة
     if (appData.app_type === 'webview' && appData.content) {
       return res.redirect(appData.content);
     }
 
-    // لو HTML - نعرضه مباشرة
     let content = appData.content || '';
     if (!content.includes('<!DOCTYPE') && !content.includes('<html')) {
       content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${content}</body></html>`;
     }
 
-    // سكربت التحديث والإشعارات
+    // رسالة تحديث جميلة + فحص مستمر
     content += `
+<style>
+.update-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:99999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(5px)}
+.update-card{background:linear-gradient(135deg,#fff,#f8f9ff);border-radius:25px;padding:35px 25px;text-align:center;max-width:340px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);animation:slideUp 0.5s}
+@keyframes slideUp{from{transform:translateY(50px);opacity:0}to{transform:translateY(0);opacity:1}}
+.update-icon{font-size:60px;margin-bottom:15px}
+.update-title{font-size:20px;font-weight:800;color:#333;margin-bottom:10px;letter-spacing:-0.5px}
+.update-text{font-size:14px;color:#666;margin-bottom:20px;line-height:1.6}
+.update-btn{display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:15px 35px;border-radius:15px;text-decoration:none;font-weight:700;font-size:15px;box-shadow:0 5px 20px rgba(102,126,234,0.5);transition:all 0.3s}
+.update-btn:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(102,126,234,0.7)}
+.update-later{display:block;margin-top:15px;background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline}
+</style>
+<div class="update-overlay" id="updateOverlay">
+    <div class="update-card">
+        <div class="update-icon">🔄</div>
+        <div class="update-title">يوجد إصدار جديد!</div>
+        <div class="update-text">تم تحديث التطبيق.<br>يرجى تحميل النسخة الأحدث</div>
+        <a href="#" class="update-btn" id="updateBtn" download>⬇️ تحديث الآن</a>
+        <button class="update-later" onclick="document.getElementById('updateOverlay').style.display='none'">لاحقًا</button>
+    </div>
+</div>
 <script>
 (function() {
     var currentVersion = ${parseInt(appData.version) || 1};
     var lastNotifId = 0;
-    var updateShown = false;
 
     function checkForUpdate() {
         fetch('${apiBase}/api/check-update/${req.params.id}')
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                if (d.version > currentVersion && !updateShown && d.latest_apk_url) {
-                    updateShown = true;
-                    var overlay = document.createElement('div');
-                    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
-                    overlay.innerHTML = '<div style="background:#fff;border-radius:15px;padding:25px;text-align:center;max-width:300px;width:90%;">' +
-                        '<div style="font-size:40px;">🔄</div>' +
-                        '<h3 style="margin:10px 0;color:#333;">يوجد إصدار جديد!</h3>' +
-                        '<p style="color:#666;font-size:13px;margin-bottom:15px;">تم تحديث التطبيق.</p>' +
-                        '<a href="${apiBase}' + d.latest_apk_url + '" style="display:inline-block;padding:12px 30px;background:#667eea;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;">⬇️ تحديث الآن</a>' +
-                        '<br><button onclick="this.parentElement.parentElement.remove()" style="margin-top:10px;background:none;border:none;color:#999;font-size:12px;cursor:pointer;">لاحقًا</button>' +
-                        '</div>';
-                    document.body.appendChild(overlay);
+                if (d.version > currentVersion && d.latest_apk_url) {
+                    document.getElementById('updateBtn').href = '${apiBase}' + d.latest_apk_url;
+                    document.getElementById('updateOverlay').style.display = 'flex';
                 }
             }).catch(function() {});
     }
@@ -107,10 +148,10 @@ app.get('/api/app-content/:id', async (req, res) => {
                     if (last.id !== lastNotifId) {
                         lastNotifId = last.id;
                         var notif = document.createElement('div');
-                        notif.style.cssText = 'position:fixed;top:10px;right:10px;left:10px;background:#333;color:#fff;padding:15px;border-radius:12px;z-index:99998;';
-                        notif.innerHTML = '<strong>📢 ' + last.title + '</strong><br><span style="font-size:13px;">' + last.message + '</span><br><button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 15px;background:#667eea;color:#fff;border:none;border-radius:6px;font-size:11px;">حسناً</button>';
+                        notif.style.cssText = 'position:fixed;top:15px;right:15px;left:15px;background:#fff;padding:15px 20px;border-radius:15px;z-index:99998;box-shadow:0 5px 20px rgba(0,0,0,0.3);font-family:Segoe UI,sans-serif;';
+                        notif.innerHTML = '<strong style="font-size:14px;">📢 ' + last.title + '</strong><br><span style="font-size:12px;color:#666;">' + last.message + '</span>';
                         document.body.appendChild(notif);
-                        setTimeout(function() { if (notif.parentElement) notif.remove(); }, 10000);
+                        setTimeout(function() { if (notif.parentElement) notif.remove(); }, 5000);
                     }
                 }
             }).catch(function() {});
@@ -118,7 +159,7 @@ app.get('/api/app-content/:id', async (req, res) => {
 
     checkForUpdate();
     checkNotifications();
-    setInterval(checkForUpdate, 5000);
+    setInterval(checkForUpdate, 3000);
     setInterval(checkNotifications, 3000);
 })();
 </script>`;
@@ -188,7 +229,6 @@ app.delete('/api/apps/:id', async (req, res) => {
   try { await pool.query('DELETE FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// بناء APK مع WebView حقيقي
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
@@ -202,7 +242,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
 
-    // HTML بسيط يعيد التوجيه للسيرفر
     const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
     fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
@@ -224,7 +263,6 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
 
-    // WebView حقيقي: لو WebView يفتح الموقع مباشرة، لو HTML يفتح الملف المحلي
     const javaUrl = appData.app_type === 'webview' && appData.content ? `"${appData.content}"` : '"file:///android_asset/index.html"';
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
