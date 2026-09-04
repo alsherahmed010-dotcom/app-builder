@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI HTML</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
+        .nav-btn.active { background: #238636; color: white; }
+        .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
+        .container { max-width: 800px; margin: 30px auto; padding: 20px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 25px; }
+        .card-title { font-size: 18px; font-weight: 800; margin-bottom: 20px; text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; font-weight: 700; color: #c9d1d9; margin-bottom: 6px; }
+        input, textarea { width: 100%; padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; font-size: 14px; color: #e6edf3; font-family: inherit; }
+        textarea { min-height: 200px; font-family: monospace; font-size: 12px; }
+        .generate-btn { width: 100%; padding: 14px; background: #1f6feb; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+        .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .copy-btn { width: 100%; padding: 12px; background: #238636; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+        .preview-btn { width: 100%; padding: 12px; background: #d29922; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 10px; text-decoration: none; display: block; text-align: center; }
+        .loading { text-align: center; padding: 20px; display: none; }
+        .spinner { border: 3px solid #30363d; border-top: 3px solid #1f6feb; border-radius: 50%; width: 35px; height: 35px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/create.html" class="nav-btn inactive">إنشاء</a>
+        <a href="/ai-html.html" class="nav-btn active">AI HTML</a>
+        <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
+    </nav>
+    <div class="container">
+        <div class="card">
+            <div class="card-title">🤖 AI HTML مولد</div>
+            <div class="form-group">
+                <label>📝 اكتب وصف الموقع اللي عايزه</label>
+                <input type="text" id="promptInput" placeholder="مثال: اصنع HTML تطبيق شات بسيط">
+            </div>
+            <button class="generate-btn" id="generateBtn" onclick="generateHTML()">🚀 توليد HTML</button>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="font-size:13px;color:#8b949e;">جاري التوليد...</p>
+            </div>
+            <div class="form-group" id="codeSection" style="display:none;margin-top:15px;">
+                <label>📄 الكود الناتج</label>
+                <textarea id="codeOutput"></textarea>
+                <button class="copy-btn" onclick="copyCode()">📋 نسخ الكود</button>
+                <a href="#" class="preview-btn" id="previewBtn" target="_blank">👁️ معاينة</a>
+            </div>
+        </div>
+    </div>
+    <script>
+        function generateHTML() {
+            const prompt = document.getElementById('promptInput').value.trim();
+            if (!prompt) return;
+            
+            const btn = document.getElementById('generateBtn');
+            const loading = document.getElementById('loading');
+            btn.disabled = true;
+            loading.style.display = 'block';
+            
+            fetch('https://apihub.agnes-ai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'agnes-2.5-pro',
+                    messages: [{role: 'user', content: `أنشئ كود HTML كامل مع CSS و JavaScript للموقع التالي: ${prompt}. اعرض الكود فقط في \`\`\`html\`\`\``}],
+                    max_tokens: 4000
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                const content = data.choices[0].message.content;
+                const match = content.match(/```html\n([\s\S]*?)```/);
+                const code = match ? match[1] : content;
+                
+                document.getElementById('codeOutput').value = code;
+                document.getElementById('codeSection').style.display = 'block';
+                
+                // تخزين الكود للمعاينة
+                localStorage.setItem('generated-html', code);
+                document.getElementById('previewBtn').href = '/preview.html';
+                
+                btn.disabled = false;
+                loading.style.display = 'none';
+            })
+            .catch(err => {
+                alert('❌ فشل التوليد');
+                btn.disabled = false;
+                loading.style.display = 'none';
+            });
+        }
+        
+        function copyCode() {
+            const code = document.getElementById('codeOutput');
+            code.select();
+            document.execCommand('copy');
+            alert('✅ تم النسخ!');
+        }
+    </script>
+</body>
+</html>

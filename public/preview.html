@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>معاينة</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Cairo', sans-serif; background: #0d1117; min-height: 100vh; }
+        .toolbar { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; display: flex; gap: 10px; align-items: center; }
+        .back-btn { padding: 8px 20px; background: #21262d; color: #c9d1d9; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 700; text-decoration: none; }
+        .iframe-container { width: 100%; height: calc(100vh - 50px); background: white; }
+        iframe { width: 100%; height: 100%; border: none; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <a href="/ai-html.html" class="back-btn">→ رجوع</a>
+    </div>
+    <div class="iframe-container" id="previewContainer"></div>
+    <script>
+        const code = localStorage.getItem('generated-html') || '<h1>لا يوجد كود</h1>';
+        document.getElementById('previewContainer').innerHTML = '<iframe srcdoc="' + code.replace(/"/g, '&quot;') + '"></iframe>';
+    </script>
+</body>
+</html>
