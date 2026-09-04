@@ -17,7 +17,7 @@ if (!privateKey.includes('\n') && privateKey.includes('BEGIN')) {
   privateKey = '-----BEGIN PRIVATE KEY-----\n' + chunks.join('\n') + '\n-----END PRIVATE KEY-----\n';
 }
 if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
-  try { admin = require('firebase-admin'); admin.initializeApp({ credential: admin.credential.cert({ projectId: process.env.FIREBASE_PROJECT_ID, privateKey, clientEmail: process.env.FIREBASE_CLIENT_EMAIL }) }); console.log('✅ Firebase'); } catch (e) {}
+  try { admin = require('firebase-admin'); admin.initializeApp({ credential: admin.credential.cert({ projectId: process.env.FIREBASE_PROJECT_ID, privateKey, clientEmail: process.env.FIREBASE_CLIENT_EMAIL }) }); } catch (e) {}
 }
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -37,10 +37,10 @@ const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized
 
 async function initDB() {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', description TEXT, fps INTEGER DEFAULT 120, welcome_message TEXT, exit_message TEXT, notification_enabled BOOLEAN DEFAULT false, admob_enabled BOOLEAN DEFAULT false, admob_banner_id TEXT, admob_interstitial_id TEXT, admob_rewarded_id TEXT, admob_appopen_id TEXT, version INTEGER DEFAULT 1, latest_apk_url TEXT, fcm_token TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS apps (id SERIAL PRIMARY KEY, name VARCHAR(255), package_name VARCHAR(255), app_type VARCHAR(50) DEFAULT 'html', content TEXT, icon_url TEXT, apk_url TEXT, status VARCHAR(50) DEFAULT 'pending', description TEXT, fps INTEGER DEFAULT 120, welcome_message TEXT, exit_message TEXT, notification_enabled BOOLEAN DEFAULT false, admob_enabled BOOLEAN DEFAULT false, admob_banner_id TEXT, admob_interstitial_id TEXT, version INTEGER DEFAULT 1, latest_apk_url TEXT, fcm_token TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`);
     await pool.query(`CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, app_id INTEGER, title VARCHAR(255), message TEXT, type VARCHAR(50), sound VARCHAR(50), created_at TIMESTAMP DEFAULT NOW())`);
     console.log('✅ DB');
-  } catch (e) { console.error('DB:', e.message); }
+  } catch (e) {}
 }
 initDB();
 
@@ -51,28 +51,15 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// WebView مباشر - يفتح الموقع مباشرة من غير iframe
+// HTML مباشر - بدون أي إضافات
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
     if (r.rows.length === 0) return res.status(404).send('Not found');
     const appData = r.rows[0];
     
-    // لو WebView - نعمل redirect للموقع
-    if (appData.app_type === 'webview' && appData.content) {
-      return res.redirect(appData.content);
-    }
-    
-    // لو HTML - نعرضه مباشرة
-    let content = appData.content || '';
-    if (!content.includes('<!DOCTYPE') && !content.includes('<html')) {
-      content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${content}</body></html>`;
-    }
-    
-    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
-    content += `<script>(function(){var v=${parseInt(appData.version)||1},n=0;setInterval(function(){fetch('${apiBase}/api/check-update/${req.params.id}').then(r=>r.json()).then(d=>{if(d.version>v&&d.latest_apk_url){if(confirm('🔄 تحديث جديد!'))window.open('${apiBase}'+d.latest_apk_url,'_blank')}}).catch(()=>{})},30000);setInterval(function(){fetch('${apiBase}/api/notifications/${req.params.id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;alert('📢 '+l.title+'\\n\\n'+l.message)}}}).catch(()=>{})},10000)})();</script>`;
-    
-    res.send(content);
+    // HTML مباشر
+    res.send(appData.content || '<h1>Empty</h1>');
   } catch (e) { res.status(500).send('Error'); }
 });
 
@@ -94,9 +81,9 @@ app.get('/api/notifications/:appId', async (req, res) => {
 
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
-    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, admob_rewarded_id, admob_appopen_id } = req.body;
+    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    const r = await pool.query(`INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, admob_rewarded_id, admob_appopen_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`, [name, package_name, app_type, content, icon_url, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, admob_rewarded_id, admob_appopen_id]);
+    const r = await pool.query(`INSERT INTO apps (name, package_name, app_type, content, icon_url, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, [name, package_name, app_type, content, icon_url, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id]);
     res.json({ success: true, app: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -112,9 +99,9 @@ app.get('/api/apps/:id', async (req, res) => {
 app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, package_name, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, admob_rewarded_id, admob_appopen_id } = req.body;
+    const { name, package_name, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    await pool.query(`UPDATE apps SET name=COALESCE($1,name), package_name=COALESCE($2,package_name), content=COALESCE($3,content), description=COALESCE($4,description), fps=COALESCE($5,fps), welcome_message=COALESCE($6,welcome_message), exit_message=COALESCE($7,exit_message), notification_enabled=COALESCE($8,notification_enabled), admob_enabled=COALESCE($9,admob_enabled), admob_banner_id=COALESCE($10,admob_banner_id), admob_interstitial_id=COALESCE($11,admob_interstitial_id), admob_rewarded_id=COALESCE($12,admob_rewarded_id), admob_appopen_id=COALESCE($13,admob_appopen_id), version=version+1 WHERE id=$14`, [name, package_name, content, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, admob_rewarded_id, admob_appopen_id, id]);
+    await pool.query(`UPDATE apps SET name=COALESCE($1,name), package_name=COALESCE($2,package_name), content=COALESCE($3,content), description=COALESCE($4,description), fps=COALESCE($5,fps), welcome_message=COALESCE($6,welcome_message), exit_message=COALESCE($7,exit_message), notification_enabled=COALESCE($8,notification_enabled), admob_enabled=COALESCE($9,admob_enabled), admob_banner_id=COALESCE($10,admob_banner_id), admob_interstitial_id=COALESCE($11,admob_interstitial_id), version=version+1 WHERE id=$12`, [name, package_name, content, description, parseInt(fps)||120, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id, id]);
     if (icon_url) await pool.query('UPDATE apps SET icon_url=$1 WHERE id=$2', [icon_url, id]);
     res.json({ success: true, message: '✅ تم الحفظ!' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -137,9 +124,15 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // WebView مباشر - يفتح الموقع من غير iframe
-    const liveHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
-    fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
+    // HTML مباشر في assets
+    let htmlContent = appData.content || '';
+    if (appData.app_type === 'webview' && appData.content) {
+      htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
+    }
+    if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
+      htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${htmlContent}</body></html>`;
+    }
+    fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
     let hasIcon = false;
@@ -150,7 +143,7 @@ app.post('/api/build/:id', async (req, res) => {
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -159,7 +152,7 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
-    // WebView يفتح الموقع مباشرة
+    // WebView يقرأ من assets مباشرة
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
@@ -174,20 +167,20 @@ public class MainActivity extends Activity {
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
         w.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url.startsWith("file:///android_asset")) return false;
                 view.loadUrl(url);
                 return true;
             }
         });
-        String url = "${appData.app_type === 'webview' ? appData.content : 'file:///android_asset/index.html'}";
-        w.loadUrl(url);
+        w.loadUrl("file:///android_asset/index.html");
         setContentView(w);
     }
 }`);
