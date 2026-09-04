@@ -51,22 +51,20 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// HTML مباشر - بدون أي إضافات
+// API يرجّع المحتوى كامل
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
     if (r.rows.length === 0) return res.status(404).send('Not found');
     const appData = r.rows[0];
-    
-    // HTML مباشر
     res.send(appData.content || '<h1>Empty</h1>');
   } catch (e) { res.status(500).send('Error'); }
 });
 
 app.post('/api/notify/:id', async (req, res) => {
   try {
-    const { title, message } = req.body;
-    await pool.query('INSERT INTO notifications (app_id, title, message) VALUES ($1,$2,$3)', [req.params.id, title, message]);
+    const { title, message, type, sound } = req.body;
+    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -124,10 +122,10 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // HTML مباشر في assets
+    // HTML المحتوى مباشرة
     let htmlContent = appData.content || '';
     if (appData.app_type === 'webview' && appData.content) {
-      htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
+      htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
     }
     if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
       htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${htmlContent}</body></html>`;
@@ -142,7 +140,7 @@ app.post('/api/build/:id', async (req, res) => {
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -152,7 +150,6 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
-    // WebView يقرأ من assets مباشرة
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
@@ -168,18 +165,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setAllowFileAccess(true);
-        s.setAllowContentAccess(true);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
-        w.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url.startsWith("file:///android_asset")) return false;
-                view.loadUrl(url);
-                return true;
-            }
-        });
+        w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
         setContentView(w);
     }
