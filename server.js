@@ -1,16 +1,21 @@
 const express = require('express');
 const { exec } = require('child_process');
 const { Pool } = require('pg');
+const multer = require('multer');
 const app = express();
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+const upload = multer({ dest: 'uploads/' });
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public'));
 app.use('/builds', express.static('builds'));
+app.use('/uploads', express.static('uploads'));
 
 const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
 const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
@@ -24,11 +29,13 @@ async function initDB() {
         package_name VARCHAR(255) NOT NULL,
         app_type VARCHAR(50) NOT NULL DEFAULT 'html',
         content TEXT,
+        icon_url TEXT,
         apk_url TEXT,
         status VARCHAR(50) DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS icon_url TEXT`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -40,22 +47,24 @@ app.get('/', (req, res) => {
   res.json({ status: 'running', service: 'APK Builder' });
 });
 
-app.post('/api/apps', async (req, res) => {
+app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content } = req.body;
+    const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     const result = await pool.query(
-      'INSERT INTO apps (name, package_name, app_type, content) VALUES ($1,$2,$3,$4) RETURNING *',
-      [name, package_name, app_type, content]
+      'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [name, package_name, app_type, content, icon_url]
     );
     res.json({ success: true, app: result.rows[0] });
   } catch (e) {
+    console.error('Create error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
 app.get('/api/apps', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM apps ORDER BY created_at DESC');
+    const result = await pool.query('SELECT DISTINCT ON (package_name) * FROM apps ORDER BY package_name, created_at DESC');
     res.json({ success: true, apps: result.rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -96,7 +105,6 @@ app.post('/api/build/:id', async (req, res) => {
     
     const safeName = (appData.package_name || 'com.app.app').replace(/[^a-z0-9.]/g, '');
     const appDir = path.join(__dirname, 'builds', String(id));
-    const className = 'MainActivity';
     
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     
