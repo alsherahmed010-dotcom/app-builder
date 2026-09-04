@@ -48,18 +48,12 @@ async function initDB() {
         admob_banner_id TEXT,
         admob_interstitial_id TEXT,
         version INTEGER DEFAULT 1,
+        latest_apk_url TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS description TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS fps INTEGER DEFAULT 120`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS welcome_message TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS exit_message TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS notification_enabled BOOLEAN DEFAULT false`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_enabled BOOLEAN DEFAULT false`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_banner_id TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_interstitial_id TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS latest_apk_url TEXT`);
     await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1`);
     console.log('✅ Database initialized');
   } catch (e) {
@@ -78,7 +72,18 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// API للحصول على محتوى التطبيق مباشرة (للتحديث اللحظي)
+// API للتحقق من التحديثات
+app.get('/api/check-update/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT version, latest_apk_url, name FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, ...result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// API للمحتوى المباشر مع إعلانات ورسائل
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -87,24 +92,41 @@ app.get('/api/app-content/:id', async (req, res) => {
     const appData = result.rows[0];
     let content = appData.content;
     
-    // إضافة رسالة ترحيب
+    // رسالة ترحيب
     if (appData.welcome_message) {
       content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
     }
     
-    // إضافة رسالة خروج
+    // رسالة خروج
     if (appData.exit_message) {
       content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
     }
     
-    // إضافة AdMob
+    // إعلانات AdMob حقيقية
     if (appData.admob_enabled && appData.admob_banner_id) {
-      const admobScript = `
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>
-<ins class="adsbygoogle" style="display:block" data-ad-client="${appData.admob_banner_id}" data-ad-slot="${appData.admob_interstitial_id || ''}" data-ad-format="auto" data-full-width-responsive="true"></ins>
+      const clientId = appData.admob_banner_id.split('/')[0];
+      content += `
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${clientId}" crossorigin="anonymous"></script>
+<ins class="adsbygoogle" style="display:block" data-ad-client="${clientId}" data-ad-format="auto" data-full-width-responsive="true"></ins>
 <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
-      content += admobScript;
     }
+    
+    // إضافة كود فحص التحديث
+    content += `
+<script>
+setInterval(async () => {
+    try {
+        const res = await fetch('${req.protocol}://${req.get('host')}/api/check-update/${req.params.id}');
+        const data = await res.json();
+        if (data.latest_apk_url && data.latest_apk_url !== window._currentApk) {
+            window._currentApk = data.latest_apk_url;
+            if (confirm('🔄 يوجد تحديث جديد! هل تريد تحميله؟')) {
+                window.open('${req.protocol}://${req.get('host')}' + data.latest_apk_url, '_blank');
+            }
+        }
+    } catch(e) {}
+}, 60000);
+</script>`;
     
     res.send(content);
   } catch (e) {
@@ -164,7 +186,7 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     params.push(req.params.id);
     
     const result = await pool.query(query, params);
-    res.json({ success: true, app: result.rows[0], message: 'تم التحديث! التغييرات ستظهر فورًا في التطبيق.' });
+    res.json({ success: true, app: result.rows[0], message: '✅ تم الحفظ! التعديلات ستظهر فورًا.' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -195,7 +217,7 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // HTML بيجيب المحتوى من السيرفر (تحديث لحظي)
+    // التطبيق بيجيب المحتوى من السيرفر (تحديث لحظي)
     const liveHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -203,7 +225,7 @@ app.post('/api/build/:id', async (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="margin:0;padding:0;">
-    <iframe id="liveFrame" src="${req.protocol}://${req.get('host')}/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe>
+    <iframe src="https://app-builder-production-ab4d.up.railway.app/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe>
 </body>
 </html>`;
     
@@ -247,7 +269,6 @@ public class MainActivity extends Activity {
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
         setContentView(w);
@@ -271,7 +292,7 @@ public class MainActivity extends Activity {
         await pool.query('UPDATE apps SET status=$1 WHERE id=$2', ['failed', id]);
       } else {
         const apkUrl = `/builds/${id}/final.apk`;
-        await pool.query('UPDATE apps SET apk_url=$1, status=$2 WHERE id=$3', [apkUrl, 'completed', id]);
+        await pool.query('UPDATE apps SET apk_url=$1, latest_apk_url=$1, status=$2, version=version+1 WHERE id=$3', [apkUrl, 'completed', id]);
         console.log(`✅ Build completed: ${apkUrl}`);
       }
     });
@@ -283,7 +304,7 @@ public class MainActivity extends Activity {
 
 app.get('/api/build-status/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT status, apk_url, version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
   } catch (e) {
