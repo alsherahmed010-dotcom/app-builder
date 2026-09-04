@@ -47,6 +47,7 @@ async function initDB() {
         admob_enabled BOOLEAN DEFAULT false,
         admob_banner_id TEXT,
         admob_interstitial_id TEXT,
+        version INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
@@ -77,7 +78,40 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// إنشاء تطبيق جديد
+// API للحصول على محتوى التطبيق مباشرة (للتحديث اللحظي)
+app.get('/api/app-content/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    
+    const appData = result.rows[0];
+    let content = appData.content;
+    
+    // إضافة رسالة ترحيب
+    if (appData.welcome_message) {
+      content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
+    }
+    
+    // إضافة رسالة خروج
+    if (appData.exit_message) {
+      content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
+    }
+    
+    // إضافة AdMob
+    if (appData.admob_enabled && appData.admob_banner_id) {
+      const admobScript = `
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>
+<ins class="adsbygoogle" style="display:block" data-ad-client="${appData.admob_banner_id}" data-ad-slot="${appData.admob_interstitial_id || ''}" data-ad-format="auto" data-full-width-responsive="true"></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
+      content += admobScript;
+    }
+    
+    res.send(content);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
@@ -94,7 +128,6 @@ app.post('/api/apps', upload.single('icon'), async (req, res) => {
   }
 });
 
-// الحصول على التطبيقات
 app.get('/api/apps', async (req, res) => {
   try {
     const result = await pool.query('SELECT DISTINCT ON (package_name) * FROM apps ORDER BY package_name, created_at DESC');
@@ -104,7 +137,6 @@ app.get('/api/apps', async (req, res) => {
   }
 });
 
-// تطبيق محدد
 app.get('/api/apps/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -115,7 +147,6 @@ app.get('/api/apps/:id', async (req, res) => {
   }
 });
 
-// تحديث تطبيق
 app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, notification_enabled, admob_enabled, admob_banner_id, admob_interstitial_id } = req.body;
@@ -133,13 +164,12 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     params.push(req.params.id);
     
     const result = await pool.query(query, params);
-    res.json({ success: true, app: result.rows[0] });
+    res.json({ success: true, app: result.rows[0], message: 'تم التحديث! التغييرات ستظهر فورًا في التطبيق.' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// حذف تطبيق
 app.delete('/api/apps/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM apps WHERE id = $1', [req.params.id]);
@@ -149,7 +179,6 @@ app.delete('/api/apps/:id', async (req, res) => {
   }
 });
 
-// بناء تطبيق
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
   res.json({ success: true, message: 'Build started' });
@@ -166,24 +195,19 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // بناء HTML مع الإضافات
-    let htmlContent = appData.content;
+    // HTML بيجيب المحتوى من السيرفر (تحديث لحظي)
+    const liveHtml = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;">
+    <iframe id="liveFrame" src="${req.protocol}://${req.get('host')}/api/app-content/${id}" style="width:100%;height:100vh;border:none;"></iframe>
+</body>
+</html>`;
     
-    // إضافة رسالة ترحيب
-    if (appData.welcome_message) {
-      htmlContent = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${htmlContent}`;
-    }
-    
-    // إضافة رسالة خروج
-    if (appData.exit_message) {
-      htmlContent += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
-    }
-    
-    if (appData.app_type === 'webview') {
-      htmlContent = `<!DOCTYPE html><html><head>${appData.welcome_message ? `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>` : ''}</head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe>${appData.exit_message ? `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>` : ''}</body></html>`;
-    }
-    
-    fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
+    fs.writeFileSync(`${appDir}/assets/index.html`, liveHtml);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
     let hasIcon = false;
@@ -224,7 +248,6 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setAllowFileAccess(true);
-        s.setRenderPriority(WebSettings.RenderPriority.HIGH);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
         setContentView(w);
