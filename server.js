@@ -13,7 +13,7 @@ fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, Date.now() + '.png')
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
 const upload = multer({ storage });
 
@@ -96,6 +96,8 @@ app.post('/api/build/:id', async (req, res) => {
     const appDir = path.join(__dirname, 'builds', String(id));
     
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
+    fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
+    fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
     let htmlContent = appData.content;
     if (appData.app_type === 'webview') {
@@ -103,25 +105,38 @@ app.post('/api/build/:id', async (req, res) => {
     }
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
-    
-    // إنشاء res/resources بطريقة صحيحة
-    fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
-    // نسخ الأيقونة كـ ic_launcher.png في res/drawable
-    fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
+    // نسخ الأيقونة وتحويلها لـ PNG حقيقي باستخدام base64
     if (appData.icon_url) {
       const iconPath = path.join(__dirname, appData.icon_url);
       if (fs.existsSync(iconPath)) {
-        fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`);
+        // قراءة الملف وتحويله لـ base64 ثم كتابته كـ PNG حقيقي
+        const fileBuffer = fs.readFileSync(iconPath);
+        const base64 = fileBuffer.toString('base64');
+        // التأكد إن الملف صورة صالحة
+        const isJPEG = fileBuffer[0] === 0xFF && fileBuffer[1] === 0xD8;
+        const isPNG = fileBuffer[0] === 0x89 && fileBuffer[1] === 0x50;
+        
+        if (isPNG) {
+          fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.png`);
+        } else if (isJPEG) {
+          // JPG - نستخدمه مباشرة كـ jpg
+          fs.copyFileSync(iconPath, `${appDir}/res/drawable/ic_launcher.jpg`);
+        }
+        console.log('✅ Icon ready');
       }
     }
+    
+    const hasPng = fs.existsSync(`${appDir}/res/drawable/ic_launcher.png`);
+    const hasJpg = fs.existsSync(`${appDir}/res/drawable/ic_launcher.jpg`);
+    const iconRef = hasPng ? '@drawable/ic_launcher' : hasJpg ? '@drawable/ic_launcher' : '';
     
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="${appData.name}" android:icon="@drawable/ic_launcher" android:usesCleartextTraffic="true">
+    <application android:label="@string/app_name"${iconRef ? ` android:icon="${iconRef}"` : ''} android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -148,7 +163,6 @@ public class MainActivity extends Activity {
     }
 }`);
     
-    // استخدام aapt2 compile للأيقونة الأول
     const buildCmd = `cd ${appDir} && \
     $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && \
     javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
