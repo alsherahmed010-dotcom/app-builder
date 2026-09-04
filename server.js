@@ -17,7 +17,6 @@ app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 app.use('/builds', express.static('builds'));
 
-// Database connection
 const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
 
 const pool = new Pool({
@@ -50,26 +49,18 @@ async function initDB() {
 
 initDB();
 
-// Routes
 app.get('/', (req, res) => {
-  res.json({ 
-    status: 'running', 
-    service: 'App Builder API',
-    database: databaseUrl ? 'connected' : 'not configured'
-  });
+  res.json({ status: 'running', service: 'App Builder API' });
 });
 
-// إنشاء تطبيق جديد
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
-    
     const result = await pool.query(
       'INSERT INTO apps (name, package_name, app_type, content, icon_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [name, package_name, app_type, content, icon_url]
     );
-    
     res.json({ success: true, app: result.rows[0] });
   } catch (error) {
     console.error(error);
@@ -77,7 +68,6 @@ app.post('/api/apps', upload.single('icon'), async (req, res) => {
   }
 });
 
-// الحصول على جميع التطبيقات
 app.get('/api/apps', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps ORDER BY created_at DESC');
@@ -88,122 +78,103 @@ app.get('/api/apps', async (req, res) => {
   }
 });
 
-// الحصول على تطبيق محدد
 app.get('/api/apps/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'App not found' });
-    }
-    
+    if (result.rows.length === 0) return res.status(404).json({ error: 'App not found' });
     res.json({ success: true, app: result.rows[0] });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// تحديث تطبيق
 app.put('/api/apps/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, content, app_type } = req.body;
-    
     const result = await pool.query(
       'UPDATE apps SET name = $1, content = $2, app_type = $3, updated_at = NOW() WHERE id = $4 RETURNING *',
       [name, content, app_type, id]
     );
-    
     res.json({ success: true, app: result.rows[0] });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// حذف تطبيق
 app.delete('/api/apps/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    await pool.query('DELETE FROM apps WHERE id = $1', [id]);
-    res.json({ success: true, message: 'App deleted' });
+    await pool.query('DELETE FROM apps WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// بناء التطبيق (توليد APK)
+// بناء التطبيق - يشتغل في الخلفية
 app.post('/api/build/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  // نرد فورًا ونبني في الخلفية
+  res.json({ success: true, message: 'Build started in background' });
+  
   try {
-    const { id } = req.params;
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'App not found' });
-    }
-    
-    const appData = result.rows[0];
-    
-    // تحديث الحالة
     await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['building', id]);
     
-    // بناء التطبيق
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
+    const appData = result.rows[0];
+    
     let buildResult;
     if (appData.app_type === 'html') {
       buildResult = await buildService.buildHTMLApp({
         name: appData.name,
         packageName: appData.package_name,
         htmlContent: appData.content,
-        iconPath: appData.icon_url ? path.join(__dirname, appData.icon_url) : null
+        iconPath: null
       });
     } else {
       buildResult = await buildService.buildWebViewApp({
         name: appData.name,
         packageName: appData.package_name,
         url: appData.content,
-        iconPath: appData.icon_url ? path.join(__dirname, appData.icon_url) : null
+        iconPath: null
       });
     }
     
-    // بناء APK
     const apkPath = await buildService.buildAPK(buildResult.buildDir, buildResult.buildId);
     const apkUrl = `/builds/${path.basename(apkPath)}`;
     
-    // تحديث قاعدة البيانات
     await pool.query(
       'UPDATE apps SET apk_url = $1, status = $2 WHERE id = $3',
       [apkUrl, 'completed', id]
     );
     
-    res.json({ 
-      success: true, 
-      message: `✅ تم بناء ${appData.name} بنجاح!`,
-      apk_url: apkUrl
-    });
+    console.log(`✅ Build completed for app ${id}: ${apkUrl}`);
   } catch (error) {
-    console.error('Build error:', error);
-    await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['failed', req.params.id]);
-    res.status(500).json({ error: 'Build failed', details: error.message });
+    console.error('Build error:', error.message);
+    await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['failed', id]);
   }
 });
 
-// تحميل APK
+// فحص حالة البناء
+app.get('/api/build-status/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT status, apk_url FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, ...result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/api/download/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
-    
-    if (result.rows.length === 0 || !result.rows[0].apk_url) {
-      return res.status(404).json({ error: 'APK not found' });
-    }
-    
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0 || !result.rows[0].apk_url) return res.status(404).json({ error: 'APK not found' });
     const apkPath = path.join(__dirname, result.rows[0].apk_url);
     res.download(apkPath, `${result.rows[0].name}.apk`);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Download failed' });
   }
 });
