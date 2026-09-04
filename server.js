@@ -51,6 +51,9 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_banner_id TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_interstitial_id TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_enabled BOOLEAN DEFAULT false`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -94,24 +97,17 @@ app.get('/api/app-content/:id', async (req, res) => {
       content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
     }
     
-    if (appData.admob_enabled && appData.admob_banner_id) {
-      content += `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>`;
-    }
-    
     res.send(content);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// إرسال إشعار
 app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message } = req.body;
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT name FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    
-    console.log(`📢 Notification sent to app ${result.rows[0].name}: ${title} - ${message}`);
     res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -181,14 +177,12 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     
-    let updatedApp = result.rows[0];
-    
     if (icon_url) {
-      const iconUpdate = await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2 RETURNING *', [icon_url, id]);
-      updatedApp = iconUpdate.rows[0];
+      await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2', [icon_url, id]);
     }
     
-    res.json({ success: true, app: updatedApp, message: '✅ تم الحفظ!' });
+    const updated = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
+    res.json({ success: true, app: updated.rows[0], message: '✅ تم الحفظ!' });
   } catch (e) {
     console.error('Update error:', e.message);
     res.status(500).json({ error: e.message });
@@ -243,11 +237,15 @@ app.post('/api/build/:id', async (req, res) => {
       }
     }
     
+    // Manifest مع إعلانات AdMob
+    const admobMeta = appData.admob_enabled && appData.admob_banner_id ? `
+    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${appData.admob_banner_id.split('/')[0]}"/>` : '';
+    
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">${admobMeta}
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -256,6 +254,20 @@ app.post('/api/build/:id', async (req, res) => {
         </activity>
     </application>
 </manifest>`);
+    
+    // MainActivity مع إعلانات AdMob أصلية
+    const admobCode = appData.admob_enabled && appData.admob_banner_id ? `
+        com.google.android.gms.ads.MobileAds.initialize(this);
+        com.google.android.gms.ads.AdView adView = new com.google.android.gms.ads.AdView(this);
+        adView.setAdSize(com.google.android.gms.ads.AdSize.BANNER);
+        adView.setAdUnitId("${appData.admob_banner_id}");
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.addView(adView, new android.widget.LinearLayout.LayoutParams(-1, -2));
+        layout.addView(w, new android.widget.LinearLayout.LayoutParams(-1, 0, 1));
+        com.google.android.gms.ads.AdRequest adRequest = new com.google.android.gms.ads.AdRequest.Builder().build();
+        adView.loadAd(adRequest);
+        setContentView(layout);` : `setContentView(w);`;
     
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
@@ -273,7 +285,7 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
-        setContentView(w);
+        ${admobCode}
     }
 }`);
     
@@ -306,7 +318,7 @@ public class MainActivity extends Activity {
 
 app.get('/api/build-status/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT status, apk_url, version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
   } catch (e) {
