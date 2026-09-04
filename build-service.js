@@ -14,46 +14,27 @@ class BuildService {
     const buildDir = path.join(this.buildsDir, buildId);
     const wwwDir = path.join(buildDir, 'www');
     
-    // إنشاء المجلدات
     fs.ensureDirSync(wwwDir);
-    
-    // حفظ HTML
     fs.writeFileSync(path.join(wwwDir, 'index.html'), htmlContent);
     
-    // إنشاء capacitor.config.json
     const capConfig = {
       appId: packageName || `com.app.${name.toLowerCase().replace(/\s/g, '')}`,
       appName: name,
       webDir: 'www',
-      server: {
-        androidScheme: 'https'
-      }
+      server: { androidScheme: 'https' }
     };
     fs.writeFileSync(path.join(buildDir, 'capacitor.config.json'), JSON.stringify(capConfig, null, 2));
     
-    // إنشاء package.json
     const pkg = {
       name: name.toLowerCase().replace(/\s/g, '-'),
       version: '1.0.0',
-      description: name,
-      main: 'index.js',
       dependencies: {
         '@capacitor/core': '^6.0.0',
         '@capacitor/cli': '^6.0.0',
         '@capacitor/android': '^6.0.0'
-      },
-      scripts: {
-        build: 'cap add android && cd android && gradle assembleDebug'
       }
     };
     fs.writeFileSync(path.join(buildDir, 'package.json'), JSON.stringify(pkg, null, 2));
-    
-    // نسخ الأيقونة لو موجودة
-    if (iconPath && fs.existsSync(iconPath)) {
-      const resDir = path.join(buildDir, 'android', 'app', 'src', 'main', 'res');
-      fs.ensureDirSync(path.join(resDir, 'mipmap'));
-      fs.copyFileSync(iconPath, path.join(resDir, 'mipmap', 'ic_launcher.png'));
-    }
     
     return { buildId, buildDir };
   }
@@ -83,7 +64,7 @@ class BuildService {
       const command = `
         cd ${buildDir} && 
         npm install --silent &&
-        npx cap add android --no-sync &&
+        npx cap add android &&
         npx cap sync android &&
         cd android && 
         gradle assembleDebug --no-daemon
@@ -99,7 +80,7 @@ class BuildService {
             fs.copyFileSync(apkPath, finalApk);
             resolve(finalApk);
           } else {
-            reject(new Error('APK not found'));
+            reject(new Error('APK not found at: ' + apkPath));
           }
         }
       });
