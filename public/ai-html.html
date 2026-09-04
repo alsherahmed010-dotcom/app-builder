@@ -7,7 +7,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; display: flex; flex-direction: column; }
-        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
         .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
         .nav-btn.active { background: #1f6feb; color: white; }
         .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
@@ -24,7 +24,7 @@
         .bubble { background: #161b22; border: 1px solid #30363d; border-radius: 15px; padding: 12px 15px; font-size: 14px; line-height: 1.7; word-wrap: break-word; }
         .message.user .bubble { background: #1f6feb20; border-color: #1f6feb50; }
         
-        .code-block { background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 15px; margin-top: 10px; font-family: monospace; font-size: 11px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; }
+        .code-block { background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 15px; margin-top: 10px; font-family: monospace; font-size: 11px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; color: #3fb950; }
         .code-actions { display: flex; gap: 8px; margin-top: 8px; }
         .action-btn { padding: 8px 15px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 700; text-decoration: none; text-align: center; }
         .copy-btn { background: #238636; color: white; }
@@ -35,24 +35,31 @@
         .chat-input:focus { outline: none; border-color: #1f6feb; }
         .send-btn { padding: 14px 25px; background: #1f6feb; color: white; border: none; border-radius: 25px; cursor: pointer; font-size: 14px; font-weight: 700; }
         .send-btn:disabled { opacity: 0.5; }
-        .typing { display: none; align-self: flex-start; color: #8b949e; font-size: 13px; }
+        
+        .typing-dots { display: none; align-self: flex-start; gap: 4px; background: #161b22; border: 1px solid #30363d; border-radius: 15px; padding: 12px 15px; }
+        .typing-dots span { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; animation: bounce 1.4s infinite; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-10px); } }
     </style>
 </head>
 <body>
     <nav class="navbar">
-        <a href="/create.html" class="nav-btn inactive">إنشاء</a>
-        <a href="/ai-html.html" class="nav-btn active">AI HTML</a>
-        <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
+        <a href="/create.html" class="nav-btn inactive">➕ إنشاء</a>
+        <a href="/ai-html.html" class="nav-btn active">🤖 AI HTML</a>
+        <a href="/my-apps.html" class="nav-btn inactive">📱 تطبيقاتي</a>
     </nav>
     
     <div class="chat-container">
         <div class="messages" id="messages">
             <div class="message ai">
                 <div class="avatar">🤖</div>
-                <div class="bubble">مرحباً! أنا AI HTML. اكتب أي سؤال أو اطلب مني إنشاء HTML وسأعرض لك الكود مع أزرار نسخ ومعاينة.</div>
+                <div class="bubble">مرحباً! اكتب أي سؤال أو اطلب HTML.</div>
             </div>
         </div>
-        <div class="typing" id="typing">🤖 جاري الكتابة...</div>
+        <div class="typing-dots" id="typingDots">
+            <span></span><span></span><span></span>
+        </div>
         <div class="input-area">
             <input type="text" class="chat-input" id="chatInput" placeholder="اكتب رسالتك..." onkeypress="if(event.key==='Enter')sendMessage()">
             <button class="send-btn" id="sendBtn" onclick="sendMessage()">إرسال</button>
@@ -63,22 +70,22 @@
         const API_URL = 'https://apihub.agnes-ai.com/v1/chat/completions';
         const API_KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
         
-        function addMessage(role, content, isCode = false) {
+        function addUserMessage(content) {
             const messages = document.getElementById('messages');
             const div = document.createElement('div');
-            div.className = `message ${role}`;
-            div.innerHTML = `
-                <div class="avatar">${role === 'user' ? '👤' : '🤖'}</div>
-                <div class="bubble">${content}${isCode ? `
-                    <div class="code-block">${content}</div>
-                    <div class="code-actions">
-                        <button class="action-btn copy-btn" onclick="copyCode(this)">📋 نسخ</button>
-                        <a href="#" class="action-btn preview-btn" onclick="previewCode(this)">👁️ معاينة</a>
-                    </div>
-                ` : ''}</div>
-            `;
+            div.className = 'message user';
+            div.innerHTML = `<div class="avatar">👤</div><div class="bubble">${content}</div>`;
             messages.appendChild(div);
             messages.scrollTop = messages.scrollHeight;
+        }
+        
+        function createAIMessage() {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message ai';
+            div.innerHTML = `<div class="avatar">🤖</div><div class="bubble" id="aiBubble-${Date.now()}"></div>`;
+            messages.appendChild(div);
+            return div.querySelector('.bubble');
         }
         
         function copyCode(btn) {
@@ -100,10 +107,15 @@
             const q = input.value.trim();
             if (!q) return;
             
-            addMessage('user', q);
+            addUserMessage(q);
             input.value = '';
             document.getElementById('sendBtn').disabled = true;
-            document.getElementById('typing').style.display = 'block';
+            
+            const typingDots = document.getElementById('typingDots');
+            typingDots.style.display = 'flex';
+            
+            const bubble = createAIMessage();
+            let fullContent = '';
             
             try {
                 const response = await fetch(API_URL, {
@@ -115,27 +127,83 @@
                     body: JSON.stringify({
                         model: 'agnes-2.5-pro',
                         messages: [{role: 'user', content: q}],
-                        max_tokens: 4000
+                        max_tokens: 4000,
+                        stream: true
                     })
                 });
                 
-                const data = await response.json();
-                const content = data.choices[0].message.content;
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
                 
-                // فحص إذا كان HTML
-                if (content.includes('<') && content.includes('>') && (content.includes('html') || content.includes('div') || content.includes('body'))) {
-                    const match = content.match(/```html\n([\s\S]*?)```/) || content.match(/```\n([\s\S]*?)```/);
-                    const code = match ? match[1] : content;
-                    addMessage('ai', code, true);
-                } else {
-                    addMessage('ai', content);
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const json = JSON.parse(line.slice(6));
+                                const content = json.choices?.[0]?.delta?.content || json.choices?.[0]?.message?.content || '';
+                                if (content) {
+                                    fullContent += content;
+                                    
+                                    // عرض النص تدريجيًا
+                                    if (fullContent.includes('```html')) {
+                                        // كود HTML - نعرضه ككود
+                                        const codeMatch = fullContent.match(/```html\n([\s\S]*?)(```|$)/);
+                                        const code = codeMatch ? codeMatch[1] : fullContent.replace(/```html\n/g, '').replace(/```/g, '');
+                                        bubble.innerHTML = `<div class="code-block">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                                            <div class="code-actions">
+                                                <button class="action-btn copy-btn" onclick="copyCode(this)">📋 نسخ</button>
+                                                <a href="#" class="action-btn preview-btn" onclick="previewCode(this)">👁️ معاينة</a>
+                                            </div>`;
+                                    } else {
+                                        bubble.textContent = fullContent;
+                                    }
+                                    
+                                    bubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
+                
+                // لو مفيش streaming، جرب بدون stream
+                if (!fullContent) {
+                    const resp2 = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${API_KEY}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'agnes-2.5-pro',
+                            messages: [{role: 'user', content: q}],
+                            max_tokens: 4000
+                        })
+                    });
+                    const data2 = await resp2.json();
+                    fullContent = data2.choices[0].message.content;
+                    
+                    if (fullContent.includes('<') && fullContent.includes('>')) {
+                        bubble.innerHTML = `<div class="code-block">${fullContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                            <div class="code-actions">
+                                <button class="action-btn copy-btn" onclick="copyCode(this)">📋 نسخ</button>
+                                <a href="#" class="action-btn preview-btn" onclick="previewCode(this)">👁️ معاينة</a>
+                            </div>`;
+                    } else {
+                        bubble.textContent = fullContent;
+                    }
                 }
             } catch (err) {
-                addMessage('ai', '❌ فشل الاتصال');
+                bubble.textContent = '❌ فشل الاتصال';
             }
             
+            typingDots.style.display = 'none';
             document.getElementById('sendBtn').disabled = false;
-            document.getElementById('typing').style.display = 'none';
         }
     </script>
 </body>
