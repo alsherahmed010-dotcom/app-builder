@@ -51,9 +51,15 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_banner_id TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_interstitial_id TEXT`);
-    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS admob_enabled BOOLEAN DEFAULT false`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      app_id INTEGER,
+      title VARCHAR(255),
+      message TEXT,
+      type VARCHAR(50),
+      sound VARCHAR(50),
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
     console.log('✅ Database initialized');
   } catch (e) {
     console.error('DB error:', e.message);
@@ -69,27 +75,33 @@ if (!fs.existsSync(keystorePath)) {
   });
 }
 
-// تحميل مكتبة AdMob لو مش موجودة
-const admobJarPath = path.join(__dirname, 'play-services-ads.jar');
-if (!fs.existsSync(admobJarPath)) {
-  exec(`cd /tmp && wget -q https://repo1.maven.org/maven2/com/google/android/gms/play-services-ads-lite/22.6.0/play-services-ads-lite-22.6.0.aar -O ads.aar && unzip -o ads.aar classes.jar -d ads_extract && cp ads_extract/classes.jar ${admobJarPath} 2>/dev/null || echo "AdMob library download failed"`, (err) => {
-    if (err) console.log('⚠️ AdMob library not available');
-    else console.log('✅ AdMob library ready');
-  });
-}
-
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-app.get('/api/check-update/:id', async (req, res) => {
+// إرسال إشعار
+app.post('/api/notify/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT version, latest_apk_url, name FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true, ...result.rows[0] });
+    const { title, message, type, sound } = req.body;
+    await pool.query(
+      'INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)',
+      [req.params.id, title, message, type, sound]
+    );
+    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
+// جلب الإشعارات للتطبيق
+app.get('/api/notifications/:appId', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.appId]);
+    res.json({ success: true, notifications: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// محتوى التطبيق مع الإشعارات
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -106,16 +118,30 @@ app.get('/api/app-content/:id', async (req, res) => {
       content += `<script>window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '${appData.exit_message.replace(/'/g, "\\'")}'; });</script>`;
     }
     
+    // إضافة فحص الإشعارات
+    content += `
+<script>
+setInterval(async () => {
+    try {
+        const res = await fetch('${req.protocol}://${req.get('host')}/api/notifications/${req.params.id}');
+        const data = await res.json();
+        if (data.notifications.length > 0) {
+            const lastNotif = data.notifications[0];
+            if (lastNotif.id !== window._lastNotifId) {
+                window._lastNotifId = lastNotif.id;
+                ${appData.notification_enabled ? `
+                if ('${lastNotif.type}' === 'in-app' || '${lastNotif.type}' === 'both') {
+                    alert('${lastNotif.title}\\n${lastNotif.message}');
+                }
+                if ('${lastNotif.sound}' === 'beep') { /* تشغيل صوت */ }
+                ` : ''}
+            }
+        }
+    } catch(e) {}
+}, 30000);
+</script>`;
+    
     res.send(content);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post('/api/notify/:id', async (req, res) => {
-  try {
-    const { title, message } = req.body;
-    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -183,13 +209,9 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     );
     
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (icon_url) await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2', [icon_url, id]);
     
-    if (icon_url) {
-      await pool.query('UPDATE apps SET icon_url = $1 WHERE id = $2', [icon_url, id]);
-    }
-    
-    const updated = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
-    res.json({ success: true, app: updated.rows[0], message: '✅ تم الحفظ!' });
+    res.json({ success: true, message: '✅ تم الحفظ!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -198,6 +220,7 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
 app.delete('/api/apps/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM apps WHERE id = $1', [req.params.id]);
+    await pool.query('DELETE FROM notifications WHERE app_id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -219,7 +242,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
-    fs.mkdirSync(`${appDir}/libs`, { recursive: true });
     
     const liveHtml = `<!DOCTYPE html>
 <html>
@@ -244,19 +266,11 @@ app.post('/api/build/:id', async (req, res) => {
       }
     }
     
-    // نسخ مكتبة AdMob
-    if (fs.existsSync(admobJarPath)) {
-      fs.copyFileSync(admobJarPath, `${appDir}/libs/play-services-ads.jar`);
-    }
-    
-    const admobMeta = appData.admob_enabled && appData.admob_banner_id ? `
-    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${appData.admob_banner_id.split('/')[0]}"/>` : '';
-    
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">${admobMeta}
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -266,15 +280,12 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
-    // MainActivity مع AdMob بدون مكتبة خارجية (نستخدم WebView للإعلانات)
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
-import android.view.ViewGroup;
-import android.widget.LinearLayout;
 public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
