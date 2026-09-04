@@ -2,4 +2,5 @@ node_modules
 .env
 .git
 uploads
+builds
 *.log
