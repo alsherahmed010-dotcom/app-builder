@@ -9,85 +9,111 @@ class BuildService {
     fs.ensureDirSync(this.buildsDir);
   }
 
-  async buildHTMLApp({ name, packageName, htmlContent, iconPath }) {
+  async buildHTMLApp({ name, packageName, htmlContent }) {
     const buildId = uuidv4();
     const buildDir = path.join(this.buildsDir, buildId);
-    const wwwDir = path.join(buildDir, 'www');
-    
-    fs.ensureDirSync(wwwDir);
-    fs.writeFileSync(path.join(wwwDir, 'index.html'), htmlContent);
-    
-    const capConfig = {
-      appId: packageName || `com.app.${name.toLowerCase().replace(/\s/g, '')}`,
-      appName: name,
-      webDir: 'www',
-      server: { androidScheme: 'https' }
-    };
-    fs.writeFileSync(path.join(buildDir, 'capacitor.config.json'), JSON.stringify(capConfig, null, 2));
-    
-    const pkg = {
-      name: name.toLowerCase().replace(/\s/g, '-'),
-      version: '1.0.0',
-      dependencies: {
-        '@capacitor/core': '^6.0.0',
-        '@capacitor/cli': '^6.0.0',
-        '@capacitor/android': '^6.0.0'
-      }
-    };
-    fs.writeFileSync(path.join(buildDir, 'package.json'), JSON.stringify(pkg, null, 2));
-    
+    fs.ensureDirSync(buildDir);
+    fs.writeFileSync(path.join(buildDir, 'index.html'), htmlContent);
     return { buildId, buildDir };
   }
 
-  async buildWebViewApp({ name, packageName, url, iconPath }) {
+  async buildWebViewApp({ name, packageName, url }) {
     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${name}</title>
-    <style>
-        body { margin: 0; padding: 0; }
-        iframe { width: 100%; height: 100vh; border: none; }
-    </style>
 </head>
-<body>
-    <iframe src="${url}" allowfullscreen></iframe>
+<body style="margin:0;padding:0;">
+    <iframe src="${url}" style="width:100%;height:100vh;border:none;" allowfullscreen></iframe>
 </body>
 </html>`;
-    
-    return this.buildHTMLApp({ name, packageName, htmlContent, iconPath });
+    return this.buildHTMLApp({ name, packageName, htmlContent });
   }
 
   async buildAPK(buildDir, buildId) {
     return new Promise((resolve, reject) => {
-      // إضافة إعدادات ذاكرة أقل لـ Gradle
-      const gradleProps = path.join(buildDir, 'android', 'gradle.properties');
-      
       const command = `
-        cd ${buildDir} && 
-        npm install --silent &&
-        npx cap add android &&
-        npx cap sync android &&
-        cd android && 
-        echo "org.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=256m" >> gradle.properties &&
-        echo "org.gradle.daemon=false" >> gradle.properties &&
-        echo "org.gradle.parallel=false" >> gradle.properties &&
-        echo "android.enableJetifier=false" >> gradle.properties &&
-        gradle assembleDebug --no-daemon --offline 2>/dev/null || gradle assembleDebug --no-daemon
+        cd ${buildDir} &&
+        mkdir -p app/src/main &&
+        cp index.html app/src/main/index.html &&
+        cat > app/build.gradle << 'GRADLE'
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'com.simple.webview'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.simple.webview'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+}
+GRADLE
+        mkdir -p app/src/main/java/com/simple/webview &&
+        cat > app/src/main/java/com/simple/webview/MainActivity.java << 'JAVA'
+package com.simple.webview;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import java.io.InputStream;
+
+public class MainActivity extends Activity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        WebView webView = new WebView(this);
+        webView.setWebViewClient(new WebViewClient());
+        webView.getSettings().setJavaScriptEnabled(true);
+        try {
+            InputStream is = getAssets().open("index.html");
+            byte[] buffer = new byte[is.available()];
+            is.read(buffer);
+            is.close();
+            String html = new String(buffer, "UTF-8");
+            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+        } catch (Exception e) {
+            webView.loadUrl("about:blank");
+        }
+        setContentView(webView);
+    }
+}
+JAVA
+        mkdir -p app/src/main/assets &&
+        cp index.html app/src/main/assets/index.html &&
+        cat > app/src/main/AndroidManifest.xml << 'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:label="WebView App" android:hardwareAccelerated="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+XML
+        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx256m" 2>&1 | tail -5
       `;
       
-      exec(command, { timeout: 900000, maxBuffer: 10*1024*1024 }, (error, stdout, stderr) => {
+      exec(command, { timeout: 300000, maxBuffer: 5*1024*1024 }, (error, stdout, stderr) => {
         if (error) {
-          reject(error);
+          reject(new Error(stdout || stderr));
         } else {
-          const apkPath = path.join(buildDir, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
+          const apkPath = path.join(buildDir, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
           if (fs.existsSync(apkPath)) {
             const finalApk = path.join(this.buildsDir, `${buildId}.apk`);
             fs.copyFileSync(apkPath, finalApk);
             resolve(finalApk);
           } else {
-            reject(new Error('APK not found at: ' + apkPath));
+            reject(new Error('APK not found'));
           }
         }
       });
