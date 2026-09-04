@@ -22,7 +22,7 @@
         .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .type-btn.active { border-color: #667eea; background: #f0f3ff; color: #667eea; }
         .submit-btn { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-        .build-logs { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; margin-top: 15px; }
+        .build-logs { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; margin-top: 15px; display: none; }
         .log-success { color: #4ec9b0; }
         .log-error { color: #f48771; }
         .log-info { color: #569cd6; }
@@ -68,7 +68,7 @@
                 </div>
                 <button type="submit" class="submit-btn" id="submitBtn">🚀 إنشاء التطبيق</button>
             </form>
-            <div class="build-logs" id="buildLogs" style="display:none;"></div>
+            <div class="build-logs" id="buildLogs"></div>
             <a href="#" class="download-btn" id="downloadBtn">⬇️ تحميل APK</a>
         </div>
     </div>
@@ -100,18 +100,19 @@
             submitBtn.disabled = true;
             submitBtn.textContent = '⏳ جاري...';
             
-            const formData = new FormData();
-            formData.append('name', document.getElementById('appName').value);
-            formData.append('package_name', document.getElementById('packageName').value);
-            formData.append('app_type', appType);
-            formData.append('content', appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value);
+            const appData = {
+                name: document.getElementById('appName').value,
+                package_name: document.getElementById('packageName').value,
+                app_type: appType,
+                content: appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value
+            };
             
             try {
                 addLog('📤 إرسال البيانات...');
                 const response = await fetch(`${API_URL}/api/apps`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(Object.fromEntries(formData))
+                    body: JSON.stringify(appData)
                 });
                 const data = await response.json();
                 
