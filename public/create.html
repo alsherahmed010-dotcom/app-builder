@@ -24,11 +24,11 @@
         .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .type-btn.active { border-color: #667eea; background: #f0f3ff; color: #667eea; }
         .submit-btn { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-        .checkbox-group { display: flex; align-items: center; gap: 8px; }
-        .checkbox-group input { width: auto; }
         .fps-buttons { display: flex; gap: 8px; }
         .fps-btn { flex: 1; padding: 10px; text-align: center; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .fps-btn.active { border-color: #667eea; background: #f0f3ff; color: #667eea; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; }
+        .checkbox-group input { width: auto; }
     </style>
 </head>
 <body>
@@ -49,36 +49,36 @@
                 </div>
                 <div class="form-group">
                     <label>📦 الباكدج نيم</label>
-                    <input type="text" id="packageName" required placeholder="com.ahmed.app">
+                    <input type="text" id="packageName" required placeholder="com.example.app">
                 </div>
                 <div class="form-group">
                     <label>🖼️ أيقونة التطبيق (PNG فقط)</label>
                     <div class="icon-upload" onclick="document.getElementById('appIcon').click()">
                         <img id="iconPreview" class="icon-preview">
-                        <p style="font-size:12px;color:#888;" id="iconText">اضغط لاختيار صورة PNG</p>
+                        <p style="font-size:12px;color:#888;" id="iconText">اضغط لاختيار PNG</p>
                     </div>
                     <input type="file" id="appIcon" accept="image/png" style="display:none;" onchange="previewIcon(this)">
                 </div>
                 <div class="form-group">
                     <label>📄 وصف التطبيق</label>
-                    <input type="text" id="appDescription" placeholder="وصف مختصر للتطبيق">
+                    <input type="text" id="appDescription" placeholder="وصف مختصر">
                 </div>
                 <div class="form-group">
-                    <label>⚡ عدد الإطارات (FPS)</label>
+                    <label>⚡ FPS</label>
                     <div class="fps-buttons">
-                        <div class="fps-btn active" id="fps90" onclick="selectFps(90)">90</div>
-                        <div class="fps-btn" id="fps120" onclick="selectFps(120)">120</div>
-                        <div class="fps-btn" id="fps144" onclick="selectFps(144)">144</div>
-                        <div class="fps-btn" id="fpsAuto" onclick="selectFps(0)">تلقائي</div>
+                        <div class="fps-btn active" onclick="selectFps(this,90)">90</div>
+                        <div class="fps-btn" onclick="selectFps(this,120)">120</div>
+                        <div class="fps-btn" onclick="selectFps(this,144)">144</div>
+                        <div class="fps-btn" onclick="selectFps(this,0)">تلقائي</div>
                     </div>
                 </div>
                 <div class="form-group">
                     <label>👋 رسالة ترحيب</label>
-                    <input type="text" id="welcomeMsg" placeholder="أهلاً بك في التطبيق!">
+                    <input type="text" id="welcomeMsg">
                 </div>
                 <div class="form-group">
                     <label>👋 رسالة خروج</label>
-                    <input type="text" id="exitMsg" placeholder="إلى اللقاء!">
+                    <input type="text" id="exitMsg">
                 </div>
                 <div class="type-buttons">
                     <div class="type-btn active" id="htmlBtn" onclick="selectType('html')">💻 HTML</div>
@@ -99,23 +99,31 @@
                 <div class="form-group">
                     <div class="checkbox-group">
                         <input type="checkbox" id="notifEnabled">
-                        <label for="notifEnabled" style="margin:0;">🔔 تفعيل الإشعارات (Firebase)</label>
+                        <label for="notifEnabled" style="margin:0;">🔔 الإشعارات</label>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="checkbox-group">
                         <input type="checkbox" id="admobEnabled">
-                        <label for="admobEnabled" style="margin:0;">💰 تفعيل إعلانات AdMob (اختياري)</label>
+                        <label for="admobEnabled" style="margin:0;">💰 AdMob</label>
                     </div>
                 </div>
                 <div id="admobSection" style="display:none;">
                     <div class="form-group">
-                        <label>📱 AdMob Banner ID</label>
-                        <input type="text" id="admobBanner" placeholder="ca-app-pub-xxxx/yyyy">
+                        <label>📱 App ID (App Open)</label>
+                        <input type="text" id="admobAppOpen" placeholder="ca-app-pub-xxx~yyy">
                     </div>
                     <div class="form-group">
-                        <label>📱 AdMob Interstitial ID</label>
-                        <input type="text" id="admobInterstitial" placeholder="ca-app-pub-xxxx/zzzz">
+                        <label>📱 Banner ID</label>
+                        <input type="text" id="admobBanner" placeholder="ca-app-pub-xxx/yyy">
+                    </div>
+                    <div class="form-group">
+                        <label>🎬 Interstitial ID</label>
+                        <input type="text" id="admobInterstitial" placeholder="ca-app-pub-xxx/zzz">
+                    </div>
+                    <div class="form-group">
+                        <label>🎁 Rewarded Video ID</label>
+                        <input type="text" id="admobRewarded" placeholder="ca-app-pub-xxx/www">
                     </div>
                 </div>
                 <button type="submit" class="submit-btn" id="submitBtn">🚀 إنشاء التطبيق</button>
@@ -127,78 +135,38 @@
         let appType = 'html';
         let selectedFps = 120;
         
-        function selectType(type) {
-            appType = type;
-            document.getElementById('htmlBtn').classList.toggle('active', type === 'html');
-            document.getElementById('webviewBtn').classList.toggle('active', type === 'webview');
-            document.getElementById('htmlSection').style.display = type === 'html' ? 'block' : 'none';
-            document.getElementById('urlSection').style.display = type === 'webview' ? 'block' : 'none';
-        }
-        
-        function selectFps(fps) {
-            selectedFps = fps;
-            document.querySelectorAll('.fps-btn').forEach(btn => btn.classList.remove('active'));
-            if (fps === 90) document.getElementById('fps90').classList.add('active');
-            if (fps === 120) document.getElementById('fps120').classList.add('active');
-            if (fps === 144) document.getElementById('fps144').classList.add('active');
-            if (fps === 0) document.getElementById('fpsAuto').classList.add('active');
-        }
-        
-        document.getElementById('admobEnabled').addEventListener('change', function() {
-            document.getElementById('admobSection').style.display = this.checked ? 'block' : 'none';
-        });
-        
-        function previewIcon(input) {
-            const file = input.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    document.getElementById('iconPreview').src = e.target.result;
-                    document.getElementById('iconPreview').style.display = 'block';
-                    document.getElementById('iconText').textContent = '✅ ' + file.name;
-                };
-                reader.readAsDataURL(file);
-            }
-        }
+        function selectType(type) { appType = type; document.getElementById('htmlBtn').classList.toggle('active', type==='html'); document.getElementById('webviewBtn').classList.toggle('active', type==='webview'); document.getElementById('htmlSection').style.display = type==='html' ? 'block' : 'none'; document.getElementById('urlSection').style.display = type==='webview' ? 'block' : 'none'; }
+        function selectFps(el, fps) { selectedFps = fps; document.querySelectorAll('.fps-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
+        document.getElementById('admobEnabled').addEventListener('change', function() { document.getElementById('admobSection').style.display = this.checked ? 'block' : 'none'; });
+        function previewIcon(input) { const f = input.files[0]; if (f) { const r = new FileReader(); r.onload = e => { document.getElementById('iconPreview').src = e.target.result; document.getElementById('iconPreview').style.display = 'block'; document.getElementById('iconText').textContent = '✅ ' + f.name; }; r.readAsDataURL(f); } }
         
         document.getElementById('createForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const submitBtn = document.getElementById('submitBtn');
-            submitBtn.disabled = true;
-            submitBtn.textContent = '⏳ جاري...';
-            
-            const formData = new FormData();
-            formData.append('name', document.getElementById('appName').value);
-            formData.append('package_name', document.getElementById('packageName').value);
-            formData.append('app_type', appType);
-            formData.append('content', appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value);
-            formData.append('description', document.getElementById('appDescription').value);
-            formData.append('fps', selectedFps);
-            formData.append('welcome_message', document.getElementById('welcomeMsg').value);
-            formData.append('exit_message', document.getElementById('exitMsg').value);
-            formData.append('notification_enabled', document.getElementById('notifEnabled').checked);
-            formData.append('admob_enabled', document.getElementById('admobEnabled').checked);
-            formData.append('admob_banner_id', document.getElementById('admobBanner').value);
-            formData.append('admob_interstitial_id', document.getElementById('admobInterstitial').value);
-            
-            const iconFile = document.getElementById('appIcon').files[0];
-            if (iconFile) formData.append('icon', iconFile);
-            
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true; btn.textContent = '⏳...';
+            const fd = new FormData();
+            fd.append('name', document.getElementById('appName').value);
+            fd.append('package_name', document.getElementById('packageName').value);
+            fd.append('app_type', appType);
+            fd.append('content', appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value);
+            fd.append('description', document.getElementById('appDescription').value);
+            fd.append('fps', selectedFps);
+            fd.append('welcome_message', document.getElementById('welcomeMsg').value);
+            fd.append('exit_message', document.getElementById('exitMsg').value);
+            fd.append('notification_enabled', document.getElementById('notifEnabled').checked);
+            fd.append('admob_enabled', document.getElementById('admobEnabled').checked);
+            fd.append('admob_banner_id', document.getElementById('admobBanner').value);
+            fd.append('admob_interstitial_id', document.getElementById('admobInterstitial').value);
+            fd.append('admob_rewarded_id', document.getElementById('admobRewarded').value);
+            fd.append('admob_appopen_id', document.getElementById('admobAppOpen').value);
+            const icon = document.getElementById('appIcon').files[0];
+            if (icon) fd.append('icon', icon);
             try {
-                const response = await fetch(`${API_URL}/api/apps`, { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.success) {
-                    window.location.href = `/build.html?id=${data.app.id}`;
-                } else {
-                    alert('❌ فشل: ' + (data.error || 'خطأ'));
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = '🚀 إنشاء التطبيق';
-                }
-            } catch (error) {
-                alert('❌ فشل الاتصال');
-                submitBtn.disabled = false;
-                submitBtn.textContent = '🚀 إنشاء التطبيق';
-            }
+                const res = await fetch(`${API_URL}/api/apps`, { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.success) { window.location.href = `/build.html?id=${data.app.id}`; }
+                else { alert('❌ ' + (data.error || 'خطأ')); btn.disabled = false; btn.textContent = '🚀 إنشاء التطبيق'; }
+            } catch (err) { alert('❌ فشل'); btn.disabled = false; btn.textContent = '🚀 إنشاء التطبيق'; }
         });
     </script>
 </body>
