@@ -19,7 +19,7 @@
         input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; }
         textarea { min-height: 150px; font-family: monospace; font-size: 12px; }
         .icon-upload { border: 2px dashed #ddd; border-radius: 10px; padding: 15px; text-align: center; cursor: pointer; }
-        .icon-preview { width: 60px; height: 60px; border-radius: 15px; margin: 10px auto; display: none; }
+        .icon-preview { width: 60px; height: 60px; border-radius: 15px; margin: 10px auto; display: none; object-fit: cover; }
         .type-buttons { display: flex; gap: 8px; margin-bottom: 15px; }
         .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .type-btn.active { border-color: #667eea; background: #f0f3ff; color: #667eea; }
@@ -50,7 +50,7 @@
                     <label>🖼️ أيقونة التطبيق</label>
                     <div class="icon-upload" onclick="document.getElementById('appIcon').click()">
                         <img id="iconPreview" class="icon-preview">
-                        <p style="font-size:12px;color:#888;">اضغط لاختيار صورة</p>
+                        <p style="font-size:12px;color:#888;" id="iconText">اضغط لاختيار صورة</p>
                     </div>
                     <input type="file" id="appIcon" accept="image/*" style="display:none;" onchange="previewIcon(this)">
                 </div>
@@ -93,6 +93,7 @@
                 reader.onload = (e) => {
                     document.getElementById('iconPreview').src = e.target.result;
                     document.getElementById('iconPreview').style.display = 'block';
+                    document.getElementById('iconText').textContent = '✅ ' + file.name;
                 };
                 reader.readAsDataURL(file);
             }
@@ -111,11 +112,20 @@
             formData.append('content', appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value);
             
             const iconFile = document.getElementById('appIcon').files[0];
-            if (iconFile) formData.append('icon', iconFile);
+            if (iconFile) {
+                formData.append('icon', iconFile);
+                console.log('📸 Sending icon:', iconFile.name, iconFile.size);
+            }
             
             try {
-                const response = await fetch(`${API_URL}/api/apps`, { method: 'POST', body: formData });
+                console.log('📤 Sending to:', API_URL + '/api/apps');
+                const response = await fetch(`${API_URL}/api/apps`, {
+                    method: 'POST',
+                    body: formData
+                });
                 const data = await response.json();
+                console.log('📥 Response:', data);
+                
                 if (data.success) {
                     window.location.href = `/build.html?id=${data.app.id}`;
                 } else {
@@ -124,6 +134,7 @@
                     submitBtn.textContent = '🚀 إنشاء وبناء';
                 }
             } catch (error) {
+                console.error('Error:', error);
                 alert('❌ فشل الاتصال');
                 submitBtn.disabled = false;
                 submitBtn.textContent = '🚀 إنشاء وبناء';
