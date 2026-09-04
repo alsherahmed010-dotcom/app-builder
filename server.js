@@ -23,6 +23,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/builds', express.static('builds'));
 app.use('/uploads', express.static('uploads'));
+app.use('/libs', express.static('libs'));
 
 const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
 const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
@@ -48,6 +49,7 @@ async function initDB() {
       admob_interstitial_id TEXT,
       version INTEGER DEFAULT 1,
       latest_apk_url TEXT,
+      fcm_token TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`);
@@ -77,6 +79,16 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
+app.post('/api/notify/:id', async (req, res) => {
+  try {
+    const { title, message, type, sound } = req.body;
+    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
+    res.json({ success: true, message: '✅ تم الإرسال!' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
@@ -88,6 +100,14 @@ app.get('/api/app-content/:id', async (req, res) => {
     
     if (appData.welcome_message) {
       content = `<script>alert('${appData.welcome_message.replace(/'/g, "\\'")}');</script>${content}`;
+    }
+    
+    if (appData.admob_enabled && appData.admob_banner_id) {
+      content += `
+<style>.admob-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; }</style>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${appData.admob_banner_id}" crossorigin="anonymous"></script>
+<ins class="adsbygoogle admob-banner" style="display:block" data-ad-client="${appData.admob_banner_id}" data-ad-format="auto" data-full-width-responsive="true"></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>`;
     }
     
     content += `
@@ -119,9 +139,7 @@ app.get('/api/app-content/:id', async (req, res) => {
                         if (last.id !== _lastNotifId) {
                             _lastNotifId = last.id;
                             if (${appData.notification_enabled ? 'true' : 'false'}) {
-                                if (last.type === 'in-app' || last.type === 'both') {
-                                    alert('📢 ' + last.title + '\\n\\n' + last.message);
-                                }
+                                alert('📢 ' + last.title + '\\n\\n' + last.message);
                             }
                         }
                     }
@@ -138,11 +156,10 @@ app.get('/api/app-content/:id', async (req, res) => {
   }
 });
 
-app.post('/api/notify/:id', async (req, res) => {
+app.get('/api/check-update/:id', async (req, res) => {
   try {
-    const { title, message, type, sound } = req.body;
-    await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
-    res.json({ success: true });
+    const result = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
+    res.json({ success: true, version: result.rows[0].version, latest_apk_url: result.rows[0].latest_apk_url });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -152,16 +169,6 @@ app.get('/api/notifications/:appId', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM notifications WHERE app_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.appId]);
     res.json({ success: true, notifications: result.rows });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/check-update/:id', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true, version: result.rows[0].version, latest_apk_url: result.rows[0].latest_apk_url });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -259,6 +266,14 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
+    fs.mkdirSync(`${appDir}/libs`, { recursive: true });
+    
+    // نسخ مكتبة AdMob
+    const admobSource = path.join(__dirname, 'libs', 'play-services-ads.jar');
+    if (fs.existsSync(admobSource)) {
+      fs.copyFileSync(admobSource, `${appDir}/libs/play-services-ads.jar`);
+      console.log('✅ AdMob library copied');
+    }
     
     const liveHtml = `<!DOCTYPE html>
 <html>
@@ -347,7 +362,6 @@ public class MainActivity extends Activity {
 app.get('/api/build-status/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT status, apk_url, version FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, ...result.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
