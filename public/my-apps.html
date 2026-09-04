@@ -7,16 +7,15 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fa; min-height: 100vh; }
-        
-        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar { background: white; padding: 12px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
         .nav-buttons { display: flex; gap: 10px; }
         .nav-btn { padding: 8px 20px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
         .nav-btn.active { background: #667eea; color: white; }
         .nav-btn.inactive { background: #f0f0f0; color: #555; }
-        
         .container { max-width: 600px; margin: 30px auto; padding: 20px; }
         .app-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 12px; }
-        .app-icon { width: 45px; height: 45px; border-radius: 10px; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 20px; color: white; }
+        .app-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; overflow: hidden; }
+        .app-icon img { width: 100%; height: 100%; object-fit: cover; }
         .app-info { flex: 1; }
         .app-name { font-size: 14px; font-weight: 600; color: #333; }
         .app-type { font-size: 11px; color: #888; margin-top: 3px; }
@@ -37,7 +36,7 @@
     <nav class="navbar">
         <span style="font-size:16px;font-weight:700;color:#667eea;">📱 App Builder</span>
         <div class="nav-buttons">
-            <a href="/" class="nav-btn inactive">إنشاء</a>
+            <a href="/create.html" class="nav-btn inactive">إنشاء</a>
             <a href="/my-apps.html" class="nav-btn active">تطبيقاتي</a>
         </div>
     </nav>
@@ -51,16 +50,25 @@
             try {
                 const response = await fetch(`${API_URL}/api/apps`);
                 const data = await response.json();
-                const appsList = document.getElementById('appsList');
+                const list = document.getElementById('appsList');
                 
                 if (data.apps.length === 0) {
-                    appsList.innerHTML = '<div class="empty">📭 لا توجد تطبيقات بعد</div>';
+                    list.innerHTML = '<div class="empty">📭 لا توجد تطبيقات</div>';
                     return;
                 }
                 
-                appsList.innerHTML = data.apps.map(app => `
+                const uniqueApps = [];
+                const seen = new Set();
+                data.apps.forEach(app => {
+                    if (!seen.has(app.name + app.package_name)) {
+                        seen.add(app.name + app.package_name);
+                        uniqueApps.push(app);
+                    }
+                });
+                
+                list.innerHTML = uniqueApps.map(app => `
                     <div class="app-card">
-                        <div class="app-icon">📱</div>
+                        <div class="app-icon">${app.icon_url ? `<img src="${API_URL}${app.icon_url}" onerror="this.parentElement.innerHTML='📱'">` : '📱'}</div>
                         <div class="app-info">
                             <div class="app-name">${app.name}</div>
                             <div class="app-type">${app.app_type === 'html' ? '💻 HTML' : '🌐 WebView'}</div>
@@ -68,17 +76,13 @@
                         </div>
                         <div class="app-actions">
                             <a href="/settings.html?id=${app.id}" class="btn btn-settings">⚙️</a>
-                            ${app.status === 'completed' ? `<a href="${API_URL}${app.apk_url}" class="btn btn-download">⬇️ تحميل</a>` : `<button class="btn btn-build" onclick="buildApp(${app.id})">🔨 بناء</button>`}
+                            ${app.status === 'completed' ? `<a href="${API_URL}${app.apk_url}" class="btn btn-download">⬇️</a>` : `<a href="/build.html?id=${app.id}" class="btn btn-build">🔨</a>`}
                         </div>
                     </div>
                 `).join('');
             } catch (error) {
-                document.getElementById('appsList').innerHTML = '<div class="empty">❌ فشل الاتصال بالسيرفر</div>';
+                document.getElementById('appsList').innerHTML = '<div class="empty">❌ فشل الاتصال</div>';
             }
-        }
-        
-        async function buildApp(id) {
-            window.location.href = `/create.html?build=${id}`;
         }
         
         loadApps();
