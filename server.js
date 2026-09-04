@@ -69,6 +69,15 @@ if (!fs.existsSync(keystorePath)) {
   });
 }
 
+// تحميل مكتبة AdMob لو مش موجودة
+const admobJarPath = path.join(__dirname, 'play-services-ads.jar');
+if (!fs.existsSync(admobJarPath)) {
+  exec(`cd /tmp && wget -q https://repo1.maven.org/maven2/com/google/android/gms/play-services-ads-lite/22.6.0/play-services-ads-lite-22.6.0.aar -O ads.aar && unzip -o ads.aar classes.jar -d ads_extract && cp ads_extract/classes.jar ${admobJarPath} 2>/dev/null || echo "AdMob library download failed"`, (err) => {
+    if (err) console.log('⚠️ AdMob library not available');
+    else console.log('✅ AdMob library ready');
+  });
+}
+
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
 app.get('/api/check-update/:id', async (req, res) => {
@@ -106,8 +115,6 @@ app.get('/api/app-content/:id', async (req, res) => {
 app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message } = req.body;
-    const result = await pool.query('SELECT name FROM apps WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -184,7 +191,6 @@ app.put('/api/apps/:id', upload.single('icon'), async (req, res) => {
     const updated = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
     res.json({ success: true, app: updated.rows[0], message: '✅ تم الحفظ!' });
   } catch (e) {
-    console.error('Update error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -213,6 +219,7 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/assets`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
+    fs.mkdirSync(`${appDir}/libs`, { recursive: true });
     
     const liveHtml = `<!DOCTYPE html>
 <html>
@@ -237,7 +244,11 @@ app.post('/api/build/:id', async (req, res) => {
       }
     }
     
-    // Manifest مع إعلانات AdMob
+    // نسخ مكتبة AdMob
+    if (fs.existsSync(admobJarPath)) {
+      fs.copyFileSync(admobJarPath, `${appDir}/libs/play-services-ads.jar`);
+    }
+    
     const admobMeta = appData.admob_enabled && appData.admob_banner_id ? `
     <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${appData.admob_banner_id.split('/')[0]}"/>` : '';
     
@@ -255,26 +266,15 @@ app.post('/api/build/:id', async (req, res) => {
     </application>
 </manifest>`);
     
-    // MainActivity مع إعلانات AdMob أصلية
-    const admobCode = appData.admob_enabled && appData.admob_banner_id ? `
-        com.google.android.gms.ads.MobileAds.initialize(this);
-        com.google.android.gms.ads.AdView adView = new com.google.android.gms.ads.AdView(this);
-        adView.setAdSize(com.google.android.gms.ads.AdSize.BANNER);
-        adView.setAdUnitId("${appData.admob_banner_id}");
-        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
-        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
-        layout.addView(adView, new android.widget.LinearLayout.LayoutParams(-1, -2));
-        layout.addView(w, new android.widget.LinearLayout.LayoutParams(-1, 0, 1));
-        com.google.android.gms.ads.AdRequest adRequest = new com.google.android.gms.ads.AdRequest.Builder().build();
-        adView.loadAd(adRequest);
-        setContentView(layout);` : `setContentView(w);`;
-    
+    // MainActivity مع AdMob بدون مكتبة خارجية (نستخدم WebView للإعلانات)
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
 public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
@@ -285,7 +285,7 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         w.setWebViewClient(new WebViewClient());
         w.loadUrl("file:///android_asset/index.html");
-        ${admobCode}
+        setContentView(w);
     }
 }`);
     
