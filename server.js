@@ -26,6 +26,7 @@ const pool = new Pool({
 
 async function initDB() {
   try {
+    // إنشاء الجدول لو مش موجود
     await pool.query(`
       CREATE TABLE IF NOT EXISTS apps (
         id SERIAL PRIMARY KEY,
@@ -40,6 +41,11 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    
+    // إضافة الأعمدة الناقصة
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS apk_url TEXT`);
+    await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'`);
+    
     console.log('✅ Database initialized');
   } catch (error) {
     console.error('❌ Database error:', error.message);
@@ -73,15 +79,13 @@ app.get('/api/apps', async (req, res) => {
     const result = await pool.query('SELECT * FROM apps ORDER BY created_at DESC');
     res.json({ success: true, apps: result.rows });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 app.get('/api/apps/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'App not found' });
     res.json({ success: true, app: result.rows[0] });
   } catch (error) {
@@ -91,11 +95,10 @@ app.get('/api/apps/:id', async (req, res) => {
 
 app.put('/api/apps/:id', async (req, res) => {
   try {
-    const { id } = req.params;
     const { name, content, app_type } = req.body;
     const result = await pool.query(
       'UPDATE apps SET name = $1, content = $2, app_type = $3, updated_at = NOW() WHERE id = $4 RETURNING *',
-      [name, content, app_type, id]
+      [name, content, app_type, req.params.id]
     );
     res.json({ success: true, app: result.rows[0] });
   } catch (error) {
@@ -112,16 +115,12 @@ app.delete('/api/apps/:id', async (req, res) => {
   }
 });
 
-// بناء التطبيق - يشتغل في الخلفية
 app.post('/api/build/:id', async (req, res) => {
   const { id } = req.params;
-  
-  // نرد فورًا ونبني في الخلفية
   res.json({ success: true, message: 'Build started in background' });
   
   try {
     await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['building', id]);
-    
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
     const appData = result.rows[0];
     
@@ -150,14 +149,13 @@ app.post('/api/build/:id', async (req, res) => {
       [apkUrl, 'completed', id]
     );
     
-    console.log(`✅ Build completed for app ${id}: ${apkUrl}`);
+    console.log(`✅ Build completed: ${apkUrl}`);
   } catch (error) {
     console.error('Build error:', error.message);
     await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['failed', id]);
   }
 });
 
-// فحص حالة البناء
 app.get('/api/build-status/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT status, apk_url FROM apps WHERE id = $1', [req.params.id]);
@@ -172,8 +170,7 @@ app.get('/api/download/:id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0 || !result.rows[0].apk_url) return res.status(404).json({ error: 'APK not found' });
-    const apkPath = path.join(__dirname, result.rows[0].apk_url);
-    res.download(apkPath, `${result.rows[0].name}.apk`);
+    res.download(path.join(__dirname, result.rows[0].apk_url), `${result.rows[0].name}.apk`);
   } catch (error) {
     res.status(500).json({ error: 'Download failed' });
   }
