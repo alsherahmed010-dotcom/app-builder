@@ -8,12 +8,14 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// Firebase - مع إصلاح المفتاح
-const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-const admin = require('firebase-admin');
+// Firebase - مع إصلاح المفتاح النهائي
+let admin = null;
+const rawKey = process.env.FIREBASE_PRIVATE_KEY || '';
+const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
 
 if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
   try {
+    admin = require('firebase-admin');
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
@@ -24,9 +26,14 @@ if (privateKey && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT
     console.log('✅ Firebase initialized');
   } catch (e) {
     console.error('❌ Firebase init error:', e.message);
+    console.error('Key starts with:', privateKey.substring(0, 30));
+    console.error('Has newlines:', privateKey.includes('\n'));
   }
 } else {
-  console.log('⚠️ Firebase env vars not set');
+  console.log('⚠️ Firebase env vars missing');
+  console.log('Project ID:', process.env.FIREBASE_PROJECT_ID ? '✓' : '✗');
+  console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL ? '✓' : '✗');
+  console.log('Private Key:', process.env.FIREBASE_PRIVATE_KEY ? '✓' : '✗');
 }
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -67,7 +74,7 @@ if (!fs.existsSync(keystorePath)) {
   });
 }
 
-app.get('/', (req, res) => res.json({ status: 'running', firebase: admin.apps.length > 0 ? 'connected' : 'not connected' }));
+app.get('/', (req, res) => res.json({ status: 'running', firebase: admin ? 'connected' : 'not connected' }));
 
 app.post('/api/notify/:id', async (req, res) => {
   try {
@@ -77,7 +84,7 @@ app.post('/api/notify/:id', async (req, res) => {
     const appResult = await pool.query('SELECT fcm_token FROM apps WHERE id = $1', [req.params.id]);
     const fcmToken = appResult.rows[0]?.fcm_token;
     
-    if (fcmToken && admin.apps.length > 0) {
+    if (fcmToken && admin) {
       await admin.messaging().send({
         token: fcmToken,
         notification: { title, body: message },
