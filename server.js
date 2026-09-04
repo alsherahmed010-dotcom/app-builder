@@ -51,13 +51,71 @@ if (!fs.existsSync(keystorePath)) {
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
-// API يرجّع المحتوى كامل
+// محتوى التطبيق مع إشعارات HTML فورية
 app.get('/api/app-content/:id', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM apps WHERE id=$1', [req.params.id]);
     if (r.rows.length === 0) return res.status(404).send('Not found');
     const appData = r.rows[0];
-    res.send(appData.content || '<h1>Empty</h1>');
+    let content = appData.content || '';
+    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
+    
+    if (!content.includes('<!DOCTYPE') && !content.includes('<html')) {
+      content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${content}</body></html>`;
+    }
+    
+    // إشعارات HTML فورية - بتفحص كل 3 ثواني
+    content += `
+<script>
+(function() {
+    var _lastNotifId = 0;
+    var _appVersion = ${parseInt(appData.version)||1};
+    
+    function checkNotifications() {
+        fetch('${apiBase}/api/notifications/${req.params.id}')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.notifications && d.notifications.length > 0) {
+                    var last = d.notifications[0];
+                    if (last.id !== _lastNotifId) {
+                        _lastNotifId = last.id;
+                        // إظهار إشعار HTML جميل
+                        var notif = document.createElement('div');
+                        notif.style.cssText = 'position:fixed;top:10px;right:10px;left:10px;background:#333;color:#fff;padding:15px;border-radius:12px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,0.5);animation:slideDown 0.5s;';
+                        notif.innerHTML = '<strong style="font-size:15px;">📢 ' + last.title + '</strong><br><span style="font-size:13px;">' + last.message + '</span><br><button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 15px;background:#667eea;color:#fff;border:none;border-radius:6px;font-size:11px;">حسناً</button>';
+                        document.body.appendChild(notif);
+                        setTimeout(function() { if (notif.parentElement) notif.remove(); }, 10000);
+                    }
+                }
+            })
+            .catch(function() {});
+    }
+    
+    function checkUpdate() {
+        fetch('${apiBase}/api/check-update/${req.params.id}')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.version > _appVersion && d.latest_apk_url) {
+                    if (confirm('🔄 يوجد تحديث جديد!')) {
+                        window.open('${apiBase}' + d.latest_apk_url, '_blank');
+                    }
+                }
+            })
+            .catch(function() {});
+    }
+    
+    checkNotifications();
+    checkUpdate();
+    setInterval(checkNotifications, 3000);
+    setInterval(checkUpdate, 30000);
+    
+    var style = document.createElement('style');
+    style.textContent = '@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';
+    document.head.appendChild(style);
+})();
+</script>`;
+    
+    res.send(content);
   } catch (e) { res.status(500).send('Error'); }
 });
 
@@ -65,16 +123,17 @@ app.post('/api/notify/:id', async (req, res) => {
   try {
     const { title, message, type, sound } = req.body;
     await pool.query('INSERT INTO notifications (app_id, title, message, type, sound) VALUES ($1,$2,$3,$4,$5)', [req.params.id, title, message, type, sound]);
-    res.json({ success: true });
+    console.log(`📢 Notification saved for app ${req.params.id}: ${title}`);
+    res.json({ success: true, message: '✅ تم إرسال الإشعار!' });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/notifications/:appId', async (req, res) => {
+  try { const r = await pool.query('SELECT * FROM notifications WHERE app_id=$1 ORDER BY created_at DESC LIMIT 10', [req.params.appId]); res.json({ success: true, notifications: r.rows }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/check-update/:id', async (req, res) => {
   try { const r = await pool.query('SELECT version, latest_apk_url FROM apps WHERE id=$1', [req.params.id]); res.json({ success: true, ...r.rows[0] }); } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/notifications/:appId', async (req, res) => {
-  try { const r = await pool.query('SELECT * FROM notifications WHERE app_id=$1 ORDER BY created_at DESC LIMIT 20', [req.params.appId]); res.json({ success: true, notifications: r.rows }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
@@ -122,7 +181,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
-    // HTML المحتوى مباشرة
     let htmlContent = appData.content || '';
     if (appData.app_type === 'webview' && appData.content) {
       htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100%;height:100vh;border:none;"></iframe></body></html>`;
@@ -130,6 +188,11 @@ app.post('/api/build/:id', async (req, res) => {
     if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
       htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;">${htmlContent}</body></html>`;
     }
+    
+    // إشعارات HTML في المحتوى
+    const apiBase = 'https://app-builder-production-ab4d.up.railway.app';
+    htmlContent += `<script>(function(){var n=0;setInterval(function(){fetch('${apiBase}/api/notifications/${id}').then(r=>r.json()).then(d=>{if(d.notifications&&d.notifications.length>0){var l=d.notifications[0];if(l.id!==n){n=l.id;var el=document.createElement('div');el.style.cssText='position:fixed;top:10px;right:10px;left:10px;background:#333;color:#fff;padding:15px;border-radius:12px;z-index:99999;';el.innerHTML='<strong>📢 '+l.title+'</strong><br>'+l.message+'<br><button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 15px;background:#667eea;color:#fff;border:none;border-radius:6px;">حسناً</button>';document.body.appendChild(el);setTimeout(function(){if(el.parentElement)el.remove()},10000)}}}).catch(()=>{})},3000)})();</script>`;
+    
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
