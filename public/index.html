@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة بناء التطبيقات</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .container { text-align: center; padding: 40px; background: rgba(255,255,255,0.95); border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 500px; width: 90%; }
+        h1 { color: #333; margin-bottom: 30px; font-size: 2em; }
+        .btn { display: block; padding: 20px; margin: 15px 0; border-radius: 15px; text-decoration: none; font-size: 1.3em; font-weight: bold; transition: all 0.3s; }
+        .btn-create { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .btn-create:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(102,126,234,0.4); }
+        .btn-apps { background: white; color: #667eea; border: 3px solid #667eea; }
+        .btn-apps:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .icon { font-size: 2em; display: block; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 منصة بناء التطبيقات</h1>
+        <a href="/create.html" class="btn btn-create">
+            <span class="icon">➕</span>
+            إنشاء تطبيق جديد
+        </a>
+        <a href="/my-apps.html" class="btn btn-apps">
+            <span class="icon">📱</span>
+            تطبيقاتي
+        </a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعدادات التطبيق</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input, textarea { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; }
+        textarea { min-height: 200px; font-family: monospace; }
+        .save-btn { width: 100%; padding: 15px; background: #4caf50; color: white; border: none; border-radius: 10px; font-size: 1.2em; font-weight: bold; cursor: pointer; }
+        .save-btn:hover { opacity: 0.9; }
+        .back-link { display: block; text-align: center; margin-top: 20px; color: #667eea; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ إعدادات التطبيق</h1>
+        <form id="settingsForm">
+            <div class="form-group">
+                <label>📝 اسم التطبيق</label>
+                <input type="text" id="appName" required>
+            </div>
+            <div id="htmlSection" style="display:none;">
+                <div class="form-group">
+                    <label>📄 كود HTML</label>
+                    <textarea id="htmlCode"></textarea>
+                </div>
+            </div>
+            <div id="urlSection" style="display:none;">
+                <div class="form-group">
+                    <label>🔗 رابط الموقع</label>
+                    <input type="url" id="appUrl">
+                </div>
+            </div>
+            <button type="submit" class="save-btn">💾 حفظ التغييرات</button>
+        </form>
+        <a href="/my-apps.html" class="back-link">→ الرجوع لتطبيقاتي</a>
+    </div>
+    <script>
+        const API_URL = window.location.origin;
+        const urlParams = new URLSearchParams(window.location.search);
+        const appId = urlParams.get('id');
+        let currentApp = null;
+        
+        async function loadApp() {
+            try {
+                const response = await fetch(`${API_URL}/api/apps/${appId}`);
+                const data = await response.json();
+                currentApp = data.app;
+                
+                document.getElementById('appName').value = currentApp.name;
+                
+                if (currentApp.app_type === 'html') {
+                    document.getElementById('htmlSection').style.display = 'block';
+                    document.getElementById('htmlCode').value = currentApp.content;
+                } else {
+                    document.getElementById('urlSection').style.display = 'block';
+                    document.getElementById('appUrl').value = currentApp.content;
+                }
+            } catch (error) {
+                alert('❌ فشل تحميل التطبيق');
+            }
+        }
+        
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const updateData = {
+                name: document.getElementById('appName').value,
+                app_type: currentApp.app_type
+            };
+            
+            if (currentApp.app_type === 'html') {
+                updateData.content = document.getElementById('htmlCode').value;
+            } else {
+                updateData.content = document.getElementById('appUrl').value;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/apps/${appId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ تم حفظ التغييرات!');
+                } else {
+                    alert('❌ فشل الحفظ');
+                }
+            } catch (error) {
+                alert('❌ فشل الاتصال بالسيرفر');
+            }
+        });
+        
+        loadApp();
+    </script>
+</body>
+</html>

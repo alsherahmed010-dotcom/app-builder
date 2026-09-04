@@ -3,19 +3,25 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs-extra');
 require('dotenv').config();
+const buildService = require('./build-service');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
+app.use('/builds', express.static('builds'));
+
+// Database connection
+const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   ssl: { rejectUnauthorized: false }
 });
 
@@ -29,23 +35,31 @@ async function initDB() {
         app_type VARCHAR(50) NOT NULL DEFAULT 'html',
         content TEXT,
         icon_url TEXT,
-        status VARCHAR(50) DEFAULT 'active',
+        apk_url TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    console.log('Database initialized');
+    console.log('✅ Database initialized');
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('❌ Database error:', error.message);
+    setTimeout(initDB, 5000);
   }
 }
 
 initDB();
 
+// Routes
 app.get('/', (req, res) => {
-  res.json({ status: 'running', service: 'App Builder API' });
+  res.json({ 
+    status: 'running', 
+    service: 'App Builder API',
+    database: databaseUrl ? 'connected' : 'not configured'
+  });
 });
 
+// إنشاء تطبيق جديد
 app.post('/api/apps', upload.single('icon'), async (req, res) => {
   try {
     const { name, package_name, app_type, content } = req.body;
@@ -63,6 +77,7 @@ app.post('/api/apps', upload.single('icon'), async (req, res) => {
   }
 });
 
+// الحصول على جميع التطبيقات
 app.get('/api/apps', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM apps ORDER BY created_at DESC');
@@ -73,6 +88,7 @@ app.get('/api/apps', async (req, res) => {
   }
 });
 
+// الحصول على تطبيق محدد
 app.get('/api/apps/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -89,6 +105,7 @@ app.get('/api/apps/:id', async (req, res) => {
   }
 });
 
+// تحديث تطبيق
 app.put('/api/apps/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -106,6 +123,7 @@ app.put('/api/apps/:id', async (req, res) => {
   }
 });
 
+// حذف تطبيق
 app.delete('/api/apps/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -117,6 +135,7 @@ app.delete('/api/apps/:id', async (req, res) => {
   }
 });
 
+// بناء التطبيق (توليد APK)
 app.post('/api/build/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -127,10 +146,65 @@ app.post('/api/build/:id', async (req, res) => {
     }
     
     const appData = result.rows[0];
-    res.json({ success: true, message: `Building ${appData.name}...`, app: appData });
+    
+    // تحديث الحالة
+    await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['building', id]);
+    
+    // بناء التطبيق
+    let buildResult;
+    if (appData.app_type === 'html') {
+      buildResult = await buildService.buildHTMLApp({
+        name: appData.name,
+        packageName: appData.package_name,
+        htmlContent: appData.content,
+        iconPath: appData.icon_url ? path.join(__dirname, appData.icon_url) : null
+      });
+    } else {
+      buildResult = await buildService.buildWebViewApp({
+        name: appData.name,
+        packageName: appData.package_name,
+        url: appData.content,
+        iconPath: appData.icon_url ? path.join(__dirname, appData.icon_url) : null
+      });
+    }
+    
+    // بناء APK
+    const apkPath = await buildService.buildAPK(buildResult.buildDir, buildResult.buildId);
+    const apkUrl = `/builds/${path.basename(apkPath)}`;
+    
+    // تحديث قاعدة البيانات
+    await pool.query(
+      'UPDATE apps SET apk_url = $1, status = $2 WHERE id = $3',
+      [apkUrl, 'completed', id]
+    );
+    
+    res.json({ 
+      success: true, 
+      message: `✅ تم بناء ${appData.name} بنجاح!`,
+      apk_url: apkUrl
+    });
+  } catch (error) {
+    console.error('Build error:', error);
+    await pool.query('UPDATE apps SET status = $1 WHERE id = $2', ['failed', req.params.id]);
+    res.status(500).json({ error: 'Build failed', details: error.message });
+  }
+});
+
+// تحميل APK
+app.get('/api/download/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('SELECT * FROM apps WHERE id = $1', [id]);
+    
+    if (result.rows.length === 0 || !result.rows[0].apk_url) {
+      return res.status(404).json({ error: 'APK not found' });
+    }
+    
+    const apkPath = path.join(__dirname, result.rows[0].apk_url);
+    res.download(apkPath, `${result.rows[0].name}.apk`);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Download failed' });
   }
 });
 

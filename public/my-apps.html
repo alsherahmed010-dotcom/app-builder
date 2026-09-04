@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تطبيقاتي</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; }
+        .app-card { display: flex; align-items: center; gap: 20px; padding: 20px; border: 2px solid #eee; border-radius: 15px; margin-bottom: 15px; transition: all 0.3s; }
+        .app-card:hover { border-color: #667eea; box-shadow: 0 5px 20px rgba(102,126,234,0.2); }
+        .app-icon { width: 60px; height: 60px; border-radius: 15px; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 2em; }
+        .app-info { flex: 1; }
+        .app-name { font-size: 1.3em; font-weight: bold; color: #333; }
+        .app-type { color: #666; margin-top: 5px; }
+        .app-status { padding: 5px 15px; border-radius: 20px; font-size: 0.9em; }
+        .status-pending { background: #ffc10730; color: #ff9800; }
+        .status-building { background: #2196f330; color: #2196f3; }
+        .status-completed { background: #4caf5030; color: #4caf50; }
+        .status-failed { background: #f4433630; color: #f44336; }
+        .app-actions { display: flex; gap: 10px; }
+        .btn { padding: 10px 15px; border-radius: 8px; text-decoration: none; font-weight: bold; cursor: pointer; border: none; }
+        .btn-build { background: #667eea; color: white; }
+        .btn-settings { background: #f0f0f0; color: #333; }
+        .btn-download { background: #4caf50; color: white; }
+        .back-link { display: block; text-align: center; margin-top: 20px; color: #667eea; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 تطبيقاتي</h1>
+        <div id="appsList"></div>
+        <a href="/" class="back-link">→ الرجوع للرئيسية</a>
+    </div>
+    <script>
+        const API_URL = window.location.origin;
+        
+        async function loadApps() {
+            try {
+                const response = await fetch(`${API_URL}/api/apps`);
+                const data = await response.json();
+                const appsList = document.getElementById('appsList');
+                
+                if (data.apps.length === 0) {
+                    appsList.innerHTML = '<p style="text-align:center;color:#999;">لا توجد تطبيقات بعد</p>';
+                    return;
+                }
+                
+                appsList.innerHTML = data.apps.map(app => `
+                    <div class="app-card">
+                        <div class="app-icon">📱</div>
+                        <div class="app-info">
+                            <div class="app-name">${app.name}</div>
+                            <div class="app-type">${app.app_type === 'html' ? '💻 HTML' : '🌐 WebView'}</div>
+                            <span class="app-status status-${app.status}">${app.status}</span>
+                        </div>
+                        <div class="app-actions">
+                            <a href="/settings.html?id=${app.id}" class="btn btn-settings">⚙️ إعدادات</a>
+                            ${app.status === 'completed' ? `<a href="${app.apk_url}" class="btn btn-download">⬇️ تحميل</a>` : `<button class="btn btn-build" onclick="buildApp(${app.id})">🔨 بناء</button>`}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                document.getElementById('appsList').innerHTML = '<p style="text-align:center;color:red;">فشل الاتصال بالسيرفر</p>';
+            }
+        }
+        
+        async function buildApp(id) {
+            try {
+                const response = await fetch(`${API_URL}/api/build/${id}`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ بدأ البناء!');
+                    loadApps();
+                } else {
+                    alert('❌ فشل البناء');
+                }
+            } catch (error) {
+                alert('❌ فشل الاتصال بالسيرفر');
+            }
+        }
+        
+        loadApps();
+    </script>
+</body>
+</html>
