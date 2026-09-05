@@ -20,6 +20,25 @@ app.use(express.static('public'));
 app.use('/builds', express.static('builds'));
 app.use('/uploads', express.static('uploads'));
 
+// AI Proxy
+app.post('/api/ai-chat', async (req, res) => {
+    try {
+        const { messages } = req.body;
+        const response = await fetch('https://apihub.agnes-ai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ model: 'agnes-2.5-pro', messages, max_tokens: 4000 })
+        });
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_INTERNAL || process.env.DATABASE_PUBLIC_URL;
 const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
 
@@ -117,7 +136,6 @@ app.post('/api/build/:id', async (req, res) => {
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
 
-    // فحص PNG signature
     let hasIcon = false;
     if (appData.icon_url) {
       const p = path.join(__dirname, appData.icon_url);
