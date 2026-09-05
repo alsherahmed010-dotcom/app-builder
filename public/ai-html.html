@@ -10,41 +10,32 @@
         html, body { font-family: 'Cairo', sans-serif; background: #0d1117; height: 100dvh; color: #e6edf3; display: flex; flex-direction: column; overflow: hidden; }
         .navbar { background: #161b22; padding: 10px 15px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; align-items: center; flex-shrink: 0; }
         .nav-btn { padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; background: #21262d; color: #c9d1d9; cursor: pointer; border: none; }
-        
-        .chat-wrap { flex: 1; overflow-y: auto; width: 100%; max-width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; -webkit-overflow-scrolling: touch; }
+        .chat-wrap { flex: 1; overflow-y: auto; width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; -webkit-overflow-scrolling: touch; }
         .msg { display: flex; gap: 10px; width: 100%; }
         .msg.user { flex-direction: row-reverse; }
-        
         .av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; background: #238636; }
         .msg.user .av { background: #1f6feb; }
-        
         .bub { background: #161b22; border: 1px solid #30363d; border-radius: 14px; padding: 10px 13px; font-size: 13px; line-height: 1.6; color: #fff; max-width: 88%; word-break: break-word; }
         .msg.user .bub { background: #1f6feb20; border-color: #1f6feb50; }
-        
         .code-box { background: #010409; border: 1px solid #30363d; border-radius: 8px; margin: 10px -5px; width: calc(100% + 10px); overflow: hidden; }
         .code-header { background: #161b22; padding: 6px 12px; font-size: 11px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; }
         .code { padding: 12px; font-family: monospace; font-size: 12px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 350px; overflow-y: auto; direction: ltr; text-align: left; }
-        
         .acts { display: flex; gap: 6px; padding: 8px 12px; background: #161b22; border-top: 1px solid #30363d; flex-wrap: wrap; }
         .ab { padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 700; background: #21262d; color: #c9d1d9; text-decoration: none; }
         .ab.copy { background: #238636; color: white; }
         .ab.prev { background: #d29922; color: white; }
         .ab.use { background: #1f6feb; color: white; }
-        
         .dots { display: flex; gap: 4px; height: 20px; align-items: center; }
         .dots span { width: 6px; height: 6px; background: #8b949e; border-radius: 50%; animation: b 1.4s infinite; }
         .dots span:nth-child(2) { animation-delay: .2s; }
         .dots span:nth-child(3) { animation-delay: .4s; }
         @keyframes b { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
-        
         .inp-wrap { background: #0d1117; padding: 10px 15px; border-top: 1px solid #30363d; flex-shrink: 0; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-        .inp-area { display: flex; gap: 8px; width: 100%; max-width: 100%; margin: 0 auto; align-items: center; }
+        .inp-area { display: flex; gap: 8px; width: 100%; align-items: center; }
         .inp { flex: 1; padding: 10px 15px; background: #161b22; border: 1px solid #30363d; border-radius: 20px; color: #fff; font-size: 13px; font-family: inherit; outline: none; }
         .inp:focus { border-color: #1f6feb; }
-        
-        .snd { padding: 8px 18px; background: #1f6feb; color: white; border: none; border-radius: 20px; font-weight: 700; cursor: pointer; font-size: 13px; flex-shrink: 0; transition: 0.2s; }
-        .snd:hover { background: #388bfd; }
-        .snd:disabled { opacity: .5; cursor: not-allowed; }
+        .snd { padding: 8px 18px; background: #1f6feb; color: white; border: none; border-radius: 20px; font-weight: 700; cursor: pointer; font-size: 13px; flex-shrink: 0; }
+        .snd:disabled { opacity: .5; }
     </style>
 </head>
 <body>
@@ -61,8 +52,8 @@
         </div>
     </div>
     <script>
-        const KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
         const API_URL = 'https://apihub.agnes-ai.com/v1/chat/completions';
+        const API_KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
         
         function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
         function save(h) { localStorage.setItem('ai_chat', JSON.stringify(h)); }
@@ -133,10 +124,16 @@
             
             try {
                 const r = await fetch(API_URL, {
-                headers: {'Authorization': `Bearer `, 'Content-Type': 'application/json'},
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({messages: api})
+                    headers: {
+                        'Authorization': 'Bearer ' + API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'agnes-2.5-pro',
+                        messages: api,
+                        max_tokens: 4000
+                    })
                 });
                 const data = await r.json();
                 document.getElementById('typing')?.remove();
@@ -147,7 +144,7 @@
                     save(h);
                     render('ai', content);
                 } else {
-                    render('ai', '❌ ' + (data.error?.message || 'خطأ في الرد'));
+                    render('ai', '❌ ' + (data.error?.message || 'خطأ'));
                 }
             } catch(e) {
                 document.getElementById('typing')?.remove();
