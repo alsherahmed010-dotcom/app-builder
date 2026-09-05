@@ -3,36 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI</title>
+    <title>AI Chat</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Cairo', sans-serif; background: #0d1117; height: 100vh; color: #e6edf3; display: flex; flex-direction: column; overflow: hidden; }
-        .navbar { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; align-items: center; flex-shrink: 0; }
-        .nav-btn { padding: 8px 15px; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; background: #21262d; color: #c9d1d9; }
-        .chat-wrap { flex: 1; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
-        .msg { display: flex; gap: 8px; max-width: 85%; flex-shrink: 0; }
+        body { 
+            font-family: 'Cairo', sans-serif; 
+            background: #0d1117; 
+            height: 100vh; 
+            color: #e6edf3; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            font-size: 16px;
+        }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; align-items: center; flex-shrink: 0; }
+        .nav-btn { padding: 10px 18px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; background: #21262d; color: #c9d1d9; transition: 0.2s; cursor: pointer; border: none; }
+        .nav-btn:hover { background: #30363d; }
+        
+        .chat-wrap { flex: 1; overflow-y: auto; max-width: 900px; width: 100%; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
+        .msg { display: flex; gap: 12px; max-width: 90%; flex-shrink: 0; }
         .msg.user { align-self: flex-end; flex-direction: row-reverse; }
         .msg.ai { align-self: flex-start; }
-        .av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: #238636; }
+        
+        .av { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; background: #238636; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
         .msg.user .av { background: #1f6feb; }
-        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; color: #e6edf3; overflow: hidden; }
-        .msg.user .bub { background: #1f6feb20; }
-        .code { background: #0d1117; border: 1px solid #238636; border-radius: 8px; padding: 12px; margin-top: 8px; font-family: monospace; font-size: 11px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; display: block; }
-        .acts { display: flex; gap: 5px; margin-top: 6px; }
-        .ab { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 10px; font-weight: 700; text-decoration: none; background: #21262d; color: #c9d1d9; display: inline-block; }
+        
+        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 14px 18px; font-size: 15px; line-height: 1.7; color: #ffffff; overflow: hidden; }
+        .msg.user .bub { background: #1f6feb20; border-color: #1f6feb60; border-radius: 16px 4px 16px 16px; }
+        .msg.ai .bub { border-radius: 4px 16px 16px 16px; }
+        
+        .text-content { margin-bottom: 10px; }
+        .text-content:last-child { margin-bottom: 0; }
+
+        .code-box { background: #010409; border: 1px solid #30363d; border-radius: 10px; margin-top: 10px; margin-bottom: 10px; overflow: hidden; }
+        .code-header { background: #161b22; padding: 8px 15px; font-size: 12px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+        .code { background: transparent; padding: 15px; font-family: monospace; font-size: 14px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 350px; overflow-y: auto; display: block; direction: ltr; text-align: left; }
+        
+        .acts { display: flex; gap: 8px; padding: 10px 15px; background: #161b22; border-top: 1px solid #30363d; }
+        .ab { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; }
         .ab.copy { background: #238636; color: white; }
+        .ab.copy:hover { background: #2ea043; }
         .ab.prev { background: #d29922; color: white; }
+        .ab.prev:hover { background: #e3b341; }
         .ab.use { background: #1f6feb; color: white; }
-        .dots { display: none; gap: 4px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 10px 12px; align-self: flex-start; flex-shrink: 0; }
-        .dots span { width: 7px; height: 7px; background: #8b949e; border-radius: 50%; animation: b 1.4s infinite; }
-        .dots span:nth-child(2) { animation-delay: .2s; }
-        .dots span:nth-child(3) { animation-delay: .4s; }
-        @keyframes b { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
-        .inp-wrap { background: #0d1117; padding: 12px 15px; border-top: 1px solid #30363d; flex-shrink: 0; }
-        .inp-area { display: flex; gap: 8px; max-width: 800px; width: 100%; margin: 0 auto; }
-        .inp { flex: 1; padding: 12px; background: #161b22; border: 1px solid #30363d; border-radius: 25px; color: #e6edf3; font-size: 13px; font-family: inherit; outline: none; }
-        .snd { padding: 12px 20px; background: #1f6feb; color: white; border: none; border-radius: 25px; font-weight: 700; cursor: pointer; font-size: 13px; }
-        .snd:disabled { opacity: .5; }
+        .ab.use:hover { background: #388bfd; }
+
+        .dots { display: flex; gap: 5px; align-items: center; height: 24px; }
+        .dots span { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+        .dots span:nth-child(1) { animation-delay: -0.32s; }
+        .dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        .inp-wrap { background: #0d1117; padding: 15px 20px; border-top: 1px solid #30363d; flex-shrink: 0; }
+        .inp-area { display: flex; gap: 12px; max-width: 900px; width: 100%; margin: 0 auto; }
+        .inp { flex: 1; padding: 15px 20px; background: #161b22; border: 1px solid #30363d; border-radius: 30px; color: #e6edf3; font-size: 15px; font-family: inherit; outline: none; transition: border 0.3s; }
+        .inp:focus { border-color: #1f6feb; }
+        .snd { padding: 0 25px; background: #1f6feb; color: white; border: none; border-radius: 30px; font-weight: 700; cursor: pointer; font-size: 15px; transition: 0.2s; }
+        .snd:hover { background: #388bfd; }
+        .snd:disabled { opacity: .5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -42,57 +71,150 @@
         <a href="/my-apps.html" class="nav-btn">📱 تطبيقاتي</a>
     </nav>
     <div class="chat-wrap" id="wrap"></div>
-    <div class="dots" id="dots"><span></span><span></span><span></span></div>
-    <div class="inp-wrap"><div class="inp-area">
-        <input class="inp" id="inp" placeholder="اكتب..." onkeypress="if(event.key==='Enter')send()">
-        <button class="snd" id="snd" onclick="send()">إرسال</button>
-    </div></div>
+    <div class="inp-wrap">
+        <div class="inp-area">
+            <input class="inp" id="inp" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter')send()">
+            <button class="snd" id="snd" onclick="send()">إرسال</button>
+        </div>
+    </div>
+
     <script>
-        const KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
         function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
         function save(h) { localStorage.setItem('ai_chat', JSON.stringify(h)); }
         function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-        function isH(s) { const t = s.trim(); return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || (t.includes('<') && t.includes('</') && (t.includes('div') || t.includes('body') || t.includes('style') || t.includes('head'))); }
+        function isH(s) { const t = s.trim(); return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || (t.includes('<') && t.includes('</') && (t.includes('div') || t.includes('body') || t.includes('style'))); }
+
         function render(role, content) {
             const w = document.getElementById('wrap');
             const d = document.createElement('div');
-            d.className = 'msg ' + role;
-            if (role === 'ai' && isH(content)) {
-                const m = content.match(/```html\n([\s\S]*?)```/) || content.match(/```\n([\s\S]*?)```/);
-                const code = m ? m[1] : content;
-                d.innerHTML = `<div class="av">🤖</div><div class="bub"><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><a href="/preview.html" target="_blank" class="ab prev" onclick="sp(this)">👁️ معاينة</a><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
+            d.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+            
+            let innerHTML = `<div class="av">${role === 'user' ? '👤' : '🤖'}</div><div class="bub">`;
+
+            if (role === 'ai' || role === 'assistant') {
+                if (content.includes('```')) {
+                    const parts = content.split(/(```[\s\S]*?```)/g);
+                    parts.forEach(part => {
+                        if (part.startsWith('```') && part.endsWith('```')) {
+                            const codeContent = part.replace(/^```[a-z]*\n?/, '').replace(/```$/, '');
+                            innerHTML += `
+                            <div class="code-box">
+                                <div class="code-header"><span>كود برمجي</span></div>
+                                <pre class="code">${esc(codeContent)}</pre>
+                                <div class="acts">
+                                    <button class="ab copy" onclick="cp(this)">📋 نسخ</button>
+                                    <button class="ab prev" onclick="sp(this)">👁️ معاينة</button>
+                                    <button class="ab use" onclick="us(this)">🚀 استخدام</button>
+                                </div>
+                            </div>`;
+                        } else if (part.trim() !== '') {
+                            innerHTML += `<div class="text-content">${esc(part).replace(/\n/g, '<br>')}</div>`;
+                        }
+                    });
+                } else if (isH(content)) {
+                    innerHTML += `
+                    <div class="text-content">إليك الكود المطلوب:</div>
+                    <div class="code-box">
+                        <div class="code-header"><span>HTML</span></div>
+                        <pre class="code">${esc(content)}</pre>
+                        <div class="acts">
+                            <button class="ab copy" onclick="cp(this)">📋 نسخ</button>
+                            <button class="ab prev" onclick="sp(this)">👁️ معاينة</button>
+                            <button class="ab use" onclick="us(this)">🚀 استخدام</button>
+                        </div>
+                    </div>`;
+                } else {
+                    innerHTML += `<div class="text-content">${esc(content).replace(/\n/g, '<br>')}</div>`;
+                }
             } else {
-                d.innerHTML = `<div class="av">${role === 'user' ? '👤' : '🤖'}</div><div class="bub">${esc(content)}</div>`;
+                innerHTML += esc(content).replace(/\n/g, '<br>');
             }
-            w.appendChild(d); w.scrollTop = w.scrollHeight;
+            
+            innerHTML += `</div>`;
+            d.innerHTML = innerHTML;
+            w.appendChild(d); 
+            w.scrollTop = w.scrollHeight;
         }
+
+        function showTyping() {
+            const w = document.getElementById('wrap');
+            const d = document.createElement('div');
+            d.className = 'msg ai';
+            d.id = 'typing-indicator';
+            d.innerHTML = `<div class="av">🤖</div><div class="bub"><div class="dots"><span></span><span></span><span></span></div></div>`;
+            w.appendChild(d);
+            w.scrollTop = w.scrollHeight;
+        }
+
+        function hideTyping() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) indicator.remove();
+        }
+
         function load() {
             const w = document.getElementById('wrap');
             w.innerHTML = '';
             const h = hist();
-            if (h.length === 0) w.innerHTML = '<div class="msg ai"><div class="av">🤖</div><div class="bub">مرحباً!</div></div>';
+            if (h.length === 0) render('ai', 'مرحباً! كيف يمكنني مساعدتك في تصميم وبرمجة الأكواد اليوم؟');
             else h.forEach(m => render(m.role, m.content));
         }
-        function cp(b) { navigator.clipboard.writeText(b.closest('.bub').querySelector('.code').textContent).then(() => { b.textContent = '✅'; setTimeout(() => b.textContent = '📋 نسخ', 2000); }); }
-        function sp(b) { localStorage.setItem('pv', b.closest('.bub').querySelector('.code').textContent); }
-        function us(b) { localStorage.setItem('gc', b.closest('.bub').querySelector('.code').textContent); location.href = '/create.html'; }
-        async function send() {
-            const inp = document.getElementById('inp'); const q = inp.value.trim(); if (!q) return;
-            render('user', q); inp.value = '';
-            document.getElementById('snd').disabled = true;
-            const dots = document.getElementById('dots');
-            dots.style.display = 'flex'; dots.scrollIntoView({behavior:'smooth', block:'end'});
-            const h = hist(); const api = h.map(m => ({role: m.role, content: m.content})); api.push({role: 'user', content: q});
-            h.push({role: 'user', content: q}); save(h);
-            try {
-                const r = await fetch('https://apihub.agnes-ai.com/v1/chat/completions', { method: 'POST', headers: {'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json'}, body: JSON.stringify({model: 'agnes-2.5-pro', messages: api, max_tokens: 4000}) });
-                const data = await r.json(); const content = data.choices[0].message.content;
-                h.push({role: 'assistant', content}); save(h);
-                dots.style.display = 'none'; render('ai', content);
-            } catch(e) { dots.style.display = 'none'; render('ai', '❌ فشل'); }
-            document.getElementById('snd').disabled = false; document.getElementById('inp').focus();
+
+        function cp(b) { 
+            navigator.clipboard.writeText(b.closest('.code-box').querySelector('.code').textContent).then(() => { 
+                const originalText = b.innerHTML;
+                b.innerHTML = '✅ تم النسخ'; 
+                setTimeout(() => b.innerHTML = originalText, 2000); 
+            }); 
         }
-        load(); document.getElementById('inp').focus();
+        function sp(b) { 
+            localStorage.setItem('pv', b.closest('.code-box').querySelector('.code').textContent); 
+            window.open('/preview.html', '_blank');
+        }
+        function us(b) { 
+            localStorage.setItem('gc', b.closest('.code-box').querySelector('.code').textContent); 
+            location.href = '/create.html'; 
+        }
+
+        async function send() {
+            const inp = document.getElementById('inp'); 
+            const q = inp.value.trim(); 
+            if (!q) return;
+            
+            render('user', q); 
+            inp.value = '';
+            document.getElementById('snd').disabled = true;
+            
+            showTyping();
+
+            const h = hist(); 
+            const api = h.map(m => ({role: (m.role === 'ai' ? 'assistant' : m.role), content: m.content})); 
+            api.push({role: 'user', content: q});
+            h.push({role: 'user', content: q}); 
+            save(h);
+
+            try {
+                const r = await fetch('/api/ai-chat', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({messages: api}) 
+                });
+                const data = await r.json(); 
+                const content = data.choices[0].message.content;
+                
+                hideTyping();
+                h.push({role: 'assistant', content}); 
+                save(h);
+                render('ai', content);
+            } catch(e) { 
+                hideTyping(); 
+                render('ai', '❌ حدث خطأ في الاتصال، يرجى المحاولة مرة أخرى.'); 
+            }
+            document.getElementById('snd').disabled = false; 
+            document.getElementById('inp').focus();
+        }
+
+        load(); 
+        document.getElementById('inp').focus();
     </script>
 </body>
 </html>
