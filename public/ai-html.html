@@ -62,7 +62,6 @@
     </div>
     <script>
         const KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
-        // نستخدم proxy على السيرفر لتجنب CORS
         const API_URL = '/api/ai-chat';
         
         function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
