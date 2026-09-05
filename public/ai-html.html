@@ -9,18 +9,17 @@
         body { font-family: 'Cairo', sans-serif; background: #0d1117; height: 100vh; color: #e6edf3; display: flex; flex-direction: column; overflow: hidden; }
         .navbar { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; align-items: center; flex-shrink: 0; }
         .nav-btn { padding: 8px 15px; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; background: #21262d; color: #c9d1d9; }
-        .ai-btn { background: #1f6feb; color: white; width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; }
-        .chat-wrap { flex: 1; overflow-y: auto; display: flex; flex-direction: column; max-width: 800px; width: 100%; margin: 0 auto; padding: 15px; gap: 12px; }
+        .chat-wrap { flex: 1; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
         .msg { display: flex; gap: 8px; max-width: 85%; flex-shrink: 0; }
         .msg.user { align-self: flex-end; flex-direction: row-reverse; }
         .msg.ai { align-self: flex-start; }
         .av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; background: #238636; }
         .msg.user .av { background: #1f6feb; }
-        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; color: #e6edf3; }
+        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; color: #e6edf3; overflow: hidden; }
         .msg.user .bub { background: #1f6feb20; }
-        .code { background: #0d1117; border: 1px solid #238636; border-radius: 8px; padding: 12px; margin-top: 8px; font-family: monospace; font-size: 11px; color: #3fb950; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; }
-        .acts { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
-        .ab { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 10px; font-weight: 700; text-decoration: none; display: inline-block; background: #21262d; color: #c9d1d9; }
+        .code { background: #0d1117; border: 1px solid #238636; border-radius: 8px; padding: 12px; margin-top: 8px; font-family: monospace; font-size: 11px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; display: block; }
+        .acts { display: flex; gap: 5px; margin-top: 6px; }
+        .ab { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 10px; font-weight: 700; text-decoration: none; background: #21262d; color: #c9d1d9; display: inline-block; }
         .ab.copy { background: #238636; color: white; }
         .ab.prev { background: #d29922; color: white; }
         .ab.use { background: #1f6feb; color: white; }
@@ -39,12 +38,10 @@
 <body>
     <nav class="navbar">
         <a href="/create.html" class="nav-btn">➕ إنشاء</a>
-        <button class="ai-btn" onclick="goAI()">🤖</button>
+        <button class="nav-btn" style="background:#1f6feb;color:white;" onclick="location.href='/ai-html.html'">🤖 AI</button>
         <a href="/my-apps.html" class="nav-btn">📱 تطبيقاتي</a>
     </nav>
-    <div class="chat-wrap" id="wrap">
-        <div class="msg ai"><div class="av">🤖</div><div class="bub">مرحباً! اكتب أي سؤال.</div></div>
-    </div>
+    <div class="chat-wrap" id="wrap"></div>
     <div class="dots" id="dots"><span></span><span></span><span></span></div>
     <div class="inp-wrap"><div class="inp-area">
         <input class="inp" id="inp" placeholder="اكتب..." onkeypress="if(event.key==='Enter')send()">
@@ -52,11 +49,10 @@
     </div></div>
     <script>
         const KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
-        function goAI() { location.href = '/ai-html.html'; }
-        function hist() { try { return JSON.parse(localStorage.getItem('ai') || '[]'); } catch { return []; } }
-        function save(h) { localStorage.setItem('ai', JSON.stringify(h)); }
+        function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
+        function save(h) { localStorage.setItem('ai_chat', JSON.stringify(h)); }
         function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-        function isH(s) { const t = s.trim(); return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || (t.includes('<') && t.includes('</')); }
+        function isH(s) { const t = s.trim(); return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || (t.includes('<') && t.includes('</') && (t.includes('div') || t.includes('body') || t.includes('style') || t.includes('head'))); }
         function render(role, content) {
             const w = document.getElementById('wrap');
             const d = document.createElement('div');
@@ -64,7 +60,7 @@
             if (role === 'ai' && isH(content)) {
                 const m = content.match(/```html\n([\s\S]*?)```/) || content.match(/```\n([\s\S]*?)```/);
                 const code = m ? m[1] : content;
-                d.innerHTML = `<div class="av">🤖</div><div class="bub"><div class="code">${esc(code)}</div><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><a href="/preview.html" target="_blank" class="ab prev" onclick="sp(this)">👁️ معاينة</a><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
+                d.innerHTML = `<div class="av">🤖</div><div class="bub"><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><a href="/preview.html" target="_blank" class="ab prev" onclick="sp(this)">👁️ معاينة</a><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
             } else {
                 d.innerHTML = `<div class="av">${role === 'user' ? '👤' : '🤖'}</div><div class="bub">${esc(content)}</div>`;
             }
@@ -74,7 +70,7 @@
             const w = document.getElementById('wrap');
             w.innerHTML = '';
             const h = hist();
-            if (h.length === 0) w.innerHTML = '<div class="msg ai"><div class="av">🤖</div><div class="bub">مرحباً! اكتب أي سؤال.</div></div>';
+            if (h.length === 0) w.innerHTML = '<div class="msg ai"><div class="av">🤖</div><div class="bub">مرحباً!</div></div>';
             else h.forEach(m => render(m.role, m.content));
         }
         function cp(b) { navigator.clipboard.writeText(b.closest('.bub').querySelector('.code').textContent).then(() => { b.textContent = '✅'; setTimeout(() => b.textContent = '📋 نسخ', 2000); }); }
@@ -85,22 +81,18 @@
             render('user', q); inp.value = '';
             document.getElementById('snd').disabled = true;
             const dots = document.getElementById('dots');
-            dots.style.display = 'flex';
-            dots.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            dots.style.display = 'flex'; dots.scrollIntoView({behavior:'smooth', block:'end'});
             const h = hist(); const api = h.map(m => ({role: m.role, content: m.content})); api.push({role: 'user', content: q});
             h.push({role: 'user', content: q}); save(h);
             try {
                 const r = await fetch('https://apihub.agnes-ai.com/v1/chat/completions', { method: 'POST', headers: {'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json'}, body: JSON.stringify({model: 'agnes-2.5-pro', messages: api, max_tokens: 4000}) });
                 const data = await r.json(); const content = data.choices[0].message.content;
                 h.push({role: 'assistant', content}); save(h);
-                dots.style.display = 'none';
-                render('ai', content);
+                dots.style.display = 'none'; render('ai', content);
             } catch(e) { dots.style.display = 'none'; render('ai', '❌ فشل'); }
-            document.getElementById('snd').disabled = false;
-            document.getElementById('inp').focus();
+            document.getElementById('snd').disabled = false; document.getElementById('inp').focus();
         }
-        load();
-        document.getElementById('inp').focus();
+        load(); document.getElementById('inp').focus();
     </script>
 </body>
 </html>
