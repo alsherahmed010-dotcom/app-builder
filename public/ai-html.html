@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>AI Chat</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
@@ -11,20 +11,19 @@
         .navbar { background: #161b22; padding: 10px 15px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; align-items: center; flex-shrink: 0; }
         .nav-btn { padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; background: #21262d; color: #c9d1d9; cursor: pointer; border: none; }
         
-        .chat-wrap { flex: 1; overflow-y: auto; width: 100%; max-width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+        .chat-wrap { flex: 1; overflow-y: auto; width: 100%; max-width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; -webkit-overflow-scrolling: touch; }
         .msg { display: flex; gap: 10px; width: 100%; }
         .msg.user { flex-direction: row-reverse; }
         
-        .av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; background: #238636; }
+        .av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; background: #238636; }
         .msg.user .av { background: #1f6feb; }
         
-        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 14px; padding: 12px 15px; font-size: 14px; line-height: 1.6; color: #fff; max-width: 88%; word-break: break-word; }
+        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 14px; padding: 10px 13px; font-size: 13px; line-height: 1.6; color: #fff; max-width: 88%; word-break: break-word; }
         .msg.user .bub { background: #1f6feb20; border-color: #1f6feb50; }
         
-        /* جعل صندوق الأكواد يأخذ عرض الشاشة بالكامل ومريح للعين */
         .code-box { background: #010409; border: 1px solid #30363d; border-radius: 8px; margin: 10px -5px; width: calc(100% + 10px); overflow: hidden; }
-        .code-header { background: #161b22; padding: 6px 12px; font-size: 11px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
-        .code { padding: 12px; font-family: monospace; font-size: 13px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 400px; overflow-y: auto; direction: ltr; text-align: left; }
+        .code-header { background: #161b22; padding: 6px 12px; font-size: 11px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; }
+        .code { padding: 12px; font-family: monospace; font-size: 12px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 350px; overflow-y: auto; direction: ltr; text-align: left; }
         
         .acts { display: flex; gap: 6px; padding: 8px 12px; background: #161b22; border-top: 1px solid #30363d; flex-wrap: wrap; }
         .ab { padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 700; background: #21262d; color: #c9d1d9; text-decoration: none; }
@@ -38,10 +37,9 @@
         .dots span:nth-child(3) { animation-delay: .4s; }
         @keyframes b { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
         
-        /* ضبط منطقة الإدخال وزر الإرسال الصغير والمبسط */
-        .inp-wrap { background: #0d1117; padding: 10px 15px; border-top: 1px solid #30363d; flex-shrink: 0; }
+        .inp-wrap { background: #0d1117; padding: 10px 15px; border-top: 1px solid #30363d; flex-shrink: 0; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
         .inp-area { display: flex; gap: 8px; width: 100%; max-width: 100%; margin: 0 auto; align-items: center; }
-        .inp { flex: 1; padding: 10px 15px; background: #161b22; border: 1px solid #30363d; border-radius: 20px; color: #fff; font-size: 14px; font-family: inherit; outline: none; }
+        .inp { flex: 1; padding: 10px 15px; background: #161b22; border: 1px solid #30363d; border-radius: 20px; color: #fff; font-size: 13px; font-family: inherit; outline: none; }
         .inp:focus { border-color: #1f6feb; }
         
         .snd { padding: 8px 18px; background: #1f6feb; color: white; border: none; border-radius: 20px; font-weight: 700; cursor: pointer; font-size: 13px; flex-shrink: 0; transition: 0.2s; }
@@ -64,6 +62,9 @@
     </div>
     <script>
         const KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
+        // نستخدم proxy على السيرفر لتجنب CORS
+        const API_URL = '/api/ai-chat';
+        
         function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
         function save(h) { localStorage.setItem('ai_chat', JSON.stringify(h)); }
         function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -81,7 +82,7 @@
                 parts.forEach(part => {
                     if (part.startsWith('```') && part.endsWith('```')) {
                         const code = part.replace(/^```[a-z]*\n?/, '').replace(/```$/, '');
-                        inner += `<div class="code-box"><div class="code-header"><span>كود برمجي</span></div><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
+                        inner += `<div class="code-box"><div class="code-header">كود برمجي</div><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
                     } else if (part.trim() !== '') {
                         inner += `<div style="margin-bottom: 6px;">${esc(part).replace(/\n/g, '<br>')}</div>`;
                     }
@@ -89,7 +90,7 @@
                 inner += '</div>';
                 d.innerHTML = inner;
             } else if (cleanRole === 'ai' && isH(content)) {
-                d.innerHTML = `<div class="av">🤖</div><div class="bub"><div style="margin-bottom: 6px;">إليك الكود:</div><div class="code-box"><div class="code-header"><span>HTML</span></div><pre class="code">${esc(content)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div></div>`;
+                d.innerHTML = `<div class="av">🤖</div><div class="bub"><div style="margin-bottom: 6px;">إليك الكود:</div><div class="code-box"><div class="code-header">HTML</div><pre class="code">${esc(content)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div></div>`;
             } else {
                 d.innerHTML = `<div class="av">${cleanRole === 'user' ? '👤' : '🤖'}</div><div class="bub">${esc(content).replace(/\n/g, '<br>')}</div>`;
             }
@@ -132,10 +133,10 @@
             save(h);
             
             try {
-                const r = await fetch('[https://apihub.agnes-ai.com/v1/chat/completions](https://apihub.agnes-ai.com/v1/chat/completions)', {
+                const r = await fetch(API_URL, {
                     method: 'POST',
-                    headers: {'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json'},
-                    body: JSON.stringify({model: 'agnes-2.5-pro', messages: api, max_tokens: 4000})
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({messages: api})
                 });
                 const data = await r.json();
                 document.getElementById('typing')?.remove();
