@@ -7,10 +7,11 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
-        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; }
-        .nav-btn { padding: 10px 25px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; align-items: center; }
+        .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
         .nav-btn.active { background: #238636; color: white; }
         .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
+        .ai-icon-btn { background: #1f6feb; color: white; width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(31,111,235,0.5); }
         .container { max-width: 450px; margin: 80px auto; padding: 35px 25px; background: #161b22; border: 1px solid #30363d; border-radius: 16px; text-align: center; }
         .logo { font-size: 50px; margin-bottom: 20px; }
         .title { font-size: 20px; font-weight: 800; margin-bottom: 30px; }
@@ -21,8 +22,9 @@
 </head>
 <body>
     <nav class="navbar">
-        <a href="/" class="nav-btn active">إنشاء</a>
-        <a href="/my-apps.html" class="nav-btn inactive">تطبيقاتي</a>
+        <a href="/create.html" class="nav-btn active">➕ إنشاء</a>
+        <button class="ai-icon-btn" onclick="window.location.href='/ai-html.html'">🤖</button>
+        <a href="/my-apps.html" class="nav-btn inactive">📱 تطبيقاتي</a>
     </nav>
     <div class="container">
         <div class="logo">🚀</div>

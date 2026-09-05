@@ -11,12 +11,12 @@
         .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
         .nav-btn.active { background: #238636; color: white; }
         .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
-        .ai-icon-btn { background: #1f6feb; color: white; width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+        .ai-icon-btn { background: #1f6feb; color: white; width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(31,111,235,0.5); }
+        .ai-icon-btn:hover { transform: scale(1.1); }
         
-        .chat-modal { display: none; position: fixed; inset: 0; background: #0d1117; z-index: 1000; flex-direction: column; }
-        .chat-modal.show { display: flex; }
+        .chat-modal { display: flex; position: fixed; inset: 0; background: #0d1117; z-index: 1000; flex-direction: column; }
         .modal-header { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
-        .modal-title { font-size: 16px; font-weight: 800; }
+        .modal-title { font-size: 16px; font-weight: 800; color: #58a6ff; }
         .close-btn { width: 35px; height: 35px; border-radius: 50%; border: none; cursor: pointer; font-size: 18px; background: #21262d; color: #c9d1d9; display: flex; align-items: center; justify-content: center; }
         .close-btn:hover { background: #da3633; color: white; }
         
@@ -34,7 +34,13 @@
         .code-block { background: #0d1117; border: 1px solid #238636; border-radius: 10px; padding: 15px; margin-top: 10px; font-family: monospace; font-size: 11px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; color: #3fb950; }
         .preview-btn { display: inline-block; margin-top: 10px; padding: 10px 20px; background: #d29922; color: white; border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 700; }
         
-        .input-area { display: flex; gap: 10px; padding: 15px 20px; border-top: 1px solid #30363d; max-width: 800px; width: 100%; margin: 0 auto; }
+        .typing-dots { display: none; align-self: flex-start; gap: 4px; background: #161b22; border: 1px solid #30363d; border-radius: 15px; padding: 15px; }
+        .typing-dots span { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; animation: bounce 1.4s infinite; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-10px); } }
+        
+        .input-area { display: flex; gap: 10px; padding: 15px 20px; border-top: 1px solid #30363d; max-width: 800px; width: 100%; margin: 0 auto; background: #0d1117; }
         .chat-input { flex: 1; padding: 14px; background: #161b22; border: 1px solid #30363d; border-radius: 25px; font-size: 14px; color: #e6edf3; font-family: inherit; }
         .chat-input:focus { outline: none; border-color: #1f6feb; }
         .send-btn { padding: 14px 25px; background: #1f6feb; color: white; border: none; border-radius: 25px; cursor: pointer; font-size: 14px; font-weight: 700; }
@@ -48,12 +54,15 @@
         <a href="/my-apps.html" class="nav-btn inactive">📱 تطبيقاتي</a>
     </nav>
     
-    <div class="chat-modal" id="chatModal">
+    <div class="chat-modal" id="chatModal" style="display:none;">
         <div class="modal-header">
             <div class="modal-title">🤖 AI مساعد</div>
             <button class="close-btn" onclick="closeChat()">✕</button>
         </div>
         <div class="messages" id="messages"></div>
+        <div class="typing-dots" id="typingDots">
+            <span></span><span></span><span></span>
+        </div>
         <div class="input-area">
             <input type="text" class="chat-input" id="chatInput" placeholder="اكتب رسالتك..." onkeypress="if(event.key==='Enter')sendMessage()">
             <button class="send-btn" id="sendBtn" onclick="sendMessage()">إرسال</button>
@@ -65,12 +74,12 @@
         const API_KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
         
         function openChat() {
-            document.getElementById('chatModal').classList.add('show');
+            document.getElementById('chatModal').style.display = 'flex';
             document.getElementById('chatInput').focus();
         }
         
         function closeChat() {
-            document.getElementById('chatModal').classList.remove('show');
+            document.getElementById('chatModal').style.display = 'none';
         }
         
         function getHistory() {
@@ -83,7 +92,8 @@
         }
         
         function isHTML(code) {
-            return code.trim().startsWith('<!DOCTYPE') || code.trim().startsWith('<html') || (code.includes('<') && code.includes('</') && (code.includes('<div') || code.includes('<body') || code.includes('<style')));
+            const trimmed = code.trim();
+            return trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || (trimmed.includes('<') && trimmed.includes('</') && (trimmed.includes('<div') || trimmed.includes('<body') || trimmed.includes('<style') || trimmed.includes('<head')));
         }
         
         function renderMessage(role, content) {
@@ -92,7 +102,6 @@
             div.className = `message ${role}`;
             
             if (role === 'ai' && isHTML(content)) {
-                // استخراج الكود من ```html```
                 const match = content.match(/```html\n([\s\S]*?)```/) || content.match(/```\n([\s\S]*?)```/);
                 const code = match ? match[1] : content;
                 const textPart = content.replace(/```html[\s\S]*```/, '').replace(/```[\s\S]*```/, '').trim();
@@ -130,6 +139,10 @@
             input.value = '';
             document.getElementById('sendBtn').disabled = true;
             
+            const typingDots = document.getElementById('typingDots');
+            typingDots.style.display = 'flex';
+            typingDots.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            
             const history = getHistory();
             const apiMessages = history.map(m => ({role: m.role, content: m.content}));
             apiMessages.push({role: 'user', content: q});
@@ -155,8 +168,11 @@
                 
                 history.push({role: 'assistant', content: content});
                 saveHistory(history);
+                
+                typingDots.style.display = 'none';
                 renderMessage('ai', content);
             } catch (err) {
+                typingDots.style.display = 'none';
                 renderMessage('ai', '❌ فشل الاتصال');
             }
             
