@@ -7,36 +7,47 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Cairo', sans-serif; background: #0d1117; height: 100vh; color: #e6edf3; display: flex; flex-direction: column; overflow: hidden; }
+        body { font-family: 'Cairo', sans-serif; background: #0d1117; height: 100vh; color: #e6edf3; display: flex; flex-direction: column; overflow: hidden; font-size: 16px; }
         .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; align-items: center; flex-shrink: 0; }
-        .nav-btn { padding: 10px 18px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; background: #21262d; color: #c9d1d9; cursor: pointer; border: none; }
-        .chat-wrap { flex: 1; overflow-y: auto; max-width: 900px; width: 100%; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+        .nav-btn { padding: 10px 18px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; background: #21262d; color: #c9d1d9; cursor: pointer; border: none; transition: 0.2s; }
+        .nav-btn:hover { background: #30363d; }
+        
+        .chat-wrap { flex: 1; overflow-y: auto; max-width: 900px; width: 100%; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
         .msg { display: flex; gap: 12px; max-width: 90%; }
         .msg.user { align-self: flex-end; flex-direction: row-reverse; }
         .msg.ai { align-self: flex-start; }
-        .av { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; background: #238636; }
+        
+        .av { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; background: #238636; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
         .msg.user .av { background: #1f6feb; }
-        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 14px 18px; font-size: 15px; line-height: 1.7; color: #fff; }
-        .msg.user .bub { background: #1f6feb20; }
-        .code-box { background: #010409; border: 1px solid #238636; border-radius: 10px; margin: 10px 0; overflow: hidden; }
-        .code-header { background: #161b22; padding: 8px 15px; font-size: 12px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; }
-        .code { padding: 15px; font-family: monospace; font-size: 13px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; direction: ltr; text-align: left; }
+        
+        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 14px 18px; font-size: 15px; line-height: 1.7; color: #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+        .msg.user .bub { background: #1f6feb20; border-color: #1f6feb50; border-radius: 16px 4px 16px 16px; }
+        .msg.ai .bub { border-radius: 4px 16px 16px 16px; }
+        
+        .code-box { background: #010409; border: 1px solid #30363d; border-radius: 10px; margin: 12px 0; overflow: hidden; }
+        .code-header { background: #161b22; padding: 8px 15px; font-size: 12px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+        .code { padding: 15px; font-family: monospace; font-size: 14px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 350px; overflow-y: auto; direction: ltr; text-align: left; }
+        
         .acts { display: flex; gap: 8px; padding: 10px 15px; background: #161b22; border-top: 1px solid #30363d; }
-        .ab { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 700; background: #21262d; color: #c9d1d9; text-decoration: none; }
+        .ab { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 700; background: #21262d; color: #c9d1d9; text-decoration: none; transition: 0.2s; }
+        .ab:hover { opacity: 0.8; }
         .ab.copy { background: #238636; color: white; }
         .ab.prev { background: #d29922; color: white; }
         .ab.use { background: #1f6feb; color: white; }
-        .dots { display: flex; gap: 5px; height: 24px; }
+        
+        .dots { display: flex; gap: 5px; align-items: center; height: 24px; }
         .dots span { width: 8px; height: 8px; background: #8b949e; border-radius: 50%; animation: b 1.4s infinite; }
-        .dots span:nth-child(2) { animation-delay: .2s; }
-        .dots span:nth-child(3) { animation-delay: .4s; }
-        @keyframes b { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+        .dots span:nth-child(1) { animation-delay: -0.32s; }
+        .dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes b { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
         .inp-wrap { background: #0d1117; padding: 15px 20px; border-top: 1px solid #30363d; flex-shrink: 0; }
-        .inp-area { display: flex; gap: 10px; max-width: 900px; width: 100%; margin: 0 auto; }
-        .inp { flex: 1; padding: 15px 20px; background: #161b22; border: 2px solid #30363d; border-radius: 30px; color: #fff; font-size: 16px; font-family: inherit; outline: none; }
+        .inp-area { display: flex; gap: 12px; max-width: 900px; width: 100%; margin: 0 auto; }
+        .inp { flex: 1; padding: 15px 20px; background: #161b22; border: 1px solid #30363d; border-radius: 30px; color: #fff; font-size: 15px; font-family: inherit; outline: none; transition: 0.2s; }
         .inp:focus { border-color: #1f6feb; }
-        .snd { padding: 0 30px; background: #1f6feb; color: white; border: none; border-radius: 30px; font-weight: 700; cursor: pointer; font-size: 16px; }
-        .snd:disabled { opacity: .5; }
+        .snd { padding: 0 25px; background: #1f6feb; color: white; border: none; border-radius: 30px; font-weight: 700; cursor: pointer; font-size: 15px; transition: 0.2s; }
+        .snd:hover { background: #388bfd; }
+        .snd:disabled { opacity: .5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -53,7 +64,9 @@
         </div>
     </div>
     <script>
+        // ⚠️ تحذير: يفضل عدم وضع الـ API Key في الواجهة الأمامية للمشاريع الحقيقية.
         const KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
+        
         function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
         function save(h) { localStorage.setItem('ai_chat', JSON.stringify(h)); }
         function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -62,25 +75,27 @@
         function render(role, content) {
             const w = document.getElementById('wrap');
             const d = document.createElement('div');
-            d.className = 'msg ' + role;
+            // تأكيد التعامل مع role حتى لو كان محفوظ بالغلط كـ assistant
+            const cleanRole = (role === 'assistant' || role === 'ai') ? 'ai' : 'user';
+            d.className = 'msg ' + cleanRole;
             
-            if (role === 'ai' && content.includes('```')) {
+            if (cleanRole === 'ai' && content.includes('```')) {
                 const parts = content.split(/(```[\s\S]*?```)/g);
-                let inner = '<div class="av">🤖</div><div class="bub">';
+                let inner = `<div class="av">🤖</div><div class="bub">`;
                 parts.forEach(part => {
                     if (part.startsWith('```') && part.endsWith('```')) {
                         const code = part.replace(/^```[a-z]*\n?/, '').replace(/```$/, '');
-                        inner += `<div class="code-box"><div class="code-header">كود</div><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
-                    } else if (part.trim()) {
-                        inner += `<div>${esc(part).replace(/\n/g, '<br>')}</div>`;
+                        inner += `<div class="code-box"><div class="code-header"><span>كود برمجي</span></div><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
+                    } else if (part.trim() !== '') {
+                        inner += `<div style="margin-bottom: 8px;">${esc(part).replace(/\n/g, '<br>')}</div>`;
                     }
                 });
                 inner += '</div>';
                 d.innerHTML = inner;
-            } else if (role === 'ai' && isH(content)) {
-                d.innerHTML = `<div class="av">🤖</div><div class="bub"><div>إليك الكود:</div><div class="code-box"><div class="code-header">HTML</div><pre class="code">${esc(content)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div></div>`;
+            } else if (cleanRole === 'ai' && isH(content)) {
+                d.innerHTML = `<div class="av">🤖</div><div class="bub"><div style="margin-bottom: 8px;">إليك الكود:</div><div class="code-box"><div class="code-header"><span>HTML</span></div><pre class="code">${esc(content)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div></div>`;
             } else {
-                d.innerHTML = `<div class="av">${role === 'user' ? '👤' : '🤖'}</div><div class="bub">${esc(content).replace(/\n/g, '<br>')}</div>`;
+                d.innerHTML = `<div class="av">${cleanRole === 'user' ? '👤' : '🤖'}</div><div class="bub">${esc(content).replace(/\n/g, '<br>')}</div>`;
             }
             
             w.appendChild(d);
@@ -90,11 +105,11 @@
         function load() {
             document.getElementById('wrap').innerHTML = '';
             const h = hist();
-            if (h.length === 0) render('ai', 'مرحباً! اكتب سؤالك.');
+            if (h.length === 0) render('ai', 'مرحباً بك! كيف يمكنني مساعدتك اليوم؟');
             else h.forEach(m => render(m.role, m.content));
         }
         
-        function cp(b) { navigator.clipboard.writeText(b.closest('.code-box').querySelector('.code').textContent).then(() => { b.textContent = '✅'; setTimeout(() => b.textContent = '📋 نسخ', 2000); }); }
+        function cp(b) { navigator.clipboard.writeText(b.closest('.code-box').querySelector('.code').textContent).then(() => { const old = b.innerHTML; b.innerHTML = '✅ تم'; setTimeout(() => b.innerHTML = old, 2000); }); }
         function sp(b) { localStorage.setItem('pv', b.closest('.code-box').querySelector('.code').textContent); window.open('/preview.html', '_blank'); }
         function us(b) { localStorage.setItem('gc', b.closest('.code-box').querySelector('.code').textContent); location.href = '/create.html'; }
         
@@ -112,15 +127,18 @@
             typing.id = 'typing';
             typing.innerHTML = '<div class="av">🤖</div><div class="bub"><div class="dots"><span></span><span></span><span></span></div></div>';
             document.getElementById('wrap').appendChild(typing);
+            document.getElementById('wrap').scrollTop = document.getElementById('wrap').scrollHeight;
             
             const h = hist();
-            const api = h.map(m => ({role: m.role === 'ai' ? 'assistant' : m.role, content: m.content}));
+            const api = h.map(m => ({role: (m.role === 'ai' || m.role === 'assistant') ? 'assistant' : 'user', content: m.content}));
             api.push({role: 'user', content: q});
+            
+            // حفظ دور المستخدم في الذاكرة
             h.push({role: 'user', content: q});
             save(h);
             
             try {
-                const r = await fetch('https://apihub.agnes-ai.com/v1/chat/completions', {
+                const r = await fetch('[https://apihub.agnes-ai.com/v1/chat/completions](https://apihub.agnes-ai.com/v1/chat/completions)', {
                     method: 'POST',
                     headers: {'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json'},
                     body: JSON.stringify({model: 'agnes-2.5-pro', messages: api, max_tokens: 4000})
@@ -130,15 +148,16 @@
                 
                 if (data.choices && data.choices[0]) {
                     const content = data.choices[0].message.content;
-                    h.push({role: 'assistant', content});
+                    // تم التعديل هنا ليكون 'ai' بدلاً من 'assistant' لكي يعمل بشكل صحيح عند التحميل
+                    h.push({role: 'ai', content});
                     save(h);
                     render('ai', content);
                 } else {
-                    render('ai', '❌ ' + (data.error?.message || 'خطأ'));
+                    render('ai', '❌ ' + (data.error?.message || 'خطأ في الرد من السيرفر'));
                 }
             } catch(e) {
                 document.getElementById('typing')?.remove();
-                render('ai', '❌ فشل الاتصال');
+                render('ai', '❌ فشل الاتصال، تأكد من اتصالك بالإنترنت أو صحة المفتاح.');
             }
             
             document.getElementById('snd').disabled = false;
