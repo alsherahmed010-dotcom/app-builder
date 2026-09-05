@@ -101,7 +101,9 @@
         }
         
         function escapeHTML(text) {
-            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
         
         function renderMessage(role, content) {
@@ -121,7 +123,7 @@
                         <div class="code-block">${escapedCode}</div>
                         <div class="code-actions">
                             <button class="action-btn copy-btn" onclick="copyCode(this)">📋 نسخ</button>
-                            <a href="#" class="action-btn preview-btn" onclick="previewCode(this)">👁️ معاينة</a>
+                            <a href="/preview.html" target="_blank" class="action-btn preview-btn" onclick="savePreview(this)">👁️ معاينة</a>
                             <button class="action-btn use-btn" onclick="useCode(this)">🚀 استخدام</button>
                         </div>
                     </div>`;
@@ -139,19 +141,17 @@
             getHistory().forEach(msg => renderMessage(msg.role, msg.content));
         }
         
+        function savePreview(btn) {
+            const codeBlock = btn.closest('.bubble').querySelector('.code-block').textContent;
+            localStorage.setItem('preview-html', codeBlock);
+        }
+        
         function copyCode(btn) {
             const codeBlock = btn.closest('.bubble').querySelector('.code-block').textContent;
             navigator.clipboard.writeText(codeBlock).then(() => {
                 btn.textContent = '✅ تم!';
                 setTimeout(() => btn.textContent = '📋 نسخ', 2000);
             });
-        }
-        
-        function previewCode(btn) {
-            const codeBlock = btn.closest('.bubble').querySelector('.code-block').textContent;
-            localStorage.setItem('preview-html', codeBlock);
-            window.open('/preview.html', '_blank');
-            return false;
         }
         
         function useCode(btn) {
