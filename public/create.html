@@ -7,10 +7,11 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; background: #0d1117; min-height: 100vh; color: #e6edf3; }
-        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .navbar { background: #161b22; padding: 15px 20px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 10px; align-items: center; }
         .nav-btn { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; }
         .nav-btn.active { background: #238636; color: white; }
         .nav-btn.inactive { background: #21262d; color: #c9d1d9; }
+        .ai-icon-btn { background: #1f6feb; color: white; width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; }
         .container { max-width: 600px; margin: 30px auto; padding: 20px; }
         .card { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 30px 25px; }
         .card-title { font-size: 20px; font-weight: 800; margin-bottom: 25px; text-align: center; }
@@ -18,15 +19,13 @@
         label { display: block; font-size: 13px; font-weight: 700; color: #c9d1d9; margin-bottom: 6px; }
         input, textarea { width: 100%; padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 10px; font-size: 14px; color: #e6edf3; font-family: inherit; }
         input:focus, textarea:focus { outline: none; border-color: #238636; }
-        textarea { min-height: 150px; font-family: monospace; font-size: 13px; }
+        textarea { min-height: 200px; font-family: monospace; font-size: 12px; }
         .icon-upload { border: 2px dashed #30363d; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; }
-        .icon-upload:hover { border-color: #238636; }
         .icon-preview { width: 60px; height: 60px; border-radius: 15px; margin: 10px auto; display: none; object-fit: cover; }
         .type-buttons { display: flex; gap: 10px; margin-bottom: 18px; }
         .type-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #30363d; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; }
         .type-btn.active { border-color: #238636; background: #23863620; color: #3fb950; }
         .submit-btn { width: 100%; padding: 14px; background: #238636; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
-        .submit-btn:disabled { opacity: 0.5; }
         .fps-buttons { display: flex; gap: 8px; }
         .fps-btn { flex: 1; padding: 10px; text-align: center; border: 2px solid #30363d; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700; }
         .fps-btn.active { border-color: #238636; background: #23863620; color: #3fb950; }
@@ -35,7 +34,7 @@
 <body>
     <nav class="navbar">
         <a href="/create.html" class="nav-btn active">➕ إنشاء</a>
-        <a href="/ai-html.html" class="nav-btn inactive">🤖 AI HTML</a>
+        <button class="ai-icon-btn" onclick="window.location.href='/ai-html.html'">🤖</button>
         <a href="/my-apps.html" class="nav-btn inactive">📱 تطبيقاتي</a>
     </nav>
     <div class="container">
@@ -51,10 +50,10 @@
                     <input type="text" id="packageName" required placeholder="com.example.app">
                 </div>
                 <div class="form-group">
-                    <label>🖼️ أيقونة التطبيق (PNG)</label>
+                    <label>🖼️ أيقونة التطبيق</label>
                     <div class="icon-upload" onclick="document.getElementById('appIcon').click()">
                         <img id="iconPreview" class="icon-preview">
-                        <p style="font-size:12px;color:#8b949e;" id="iconText">اضغط لاختيار PNG</p>
+                        <p style="font-size:12px;color:#8b949e;" id="iconText">اضغط لاختيار صورة</p>
                     </div>
                     <input type="file" id="appIcon" accept="image/*" style="display:none;" onchange="previewIcon(this)">
                 </div>
@@ -70,10 +69,6 @@
                         <div class="fps-btn" onclick="selectFps(this,144)">144</div>
                         <div class="fps-btn" onclick="selectFps(this,0)">تلقائي</div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>👋 رسالة ترحيب</label>
-                    <input type="text" id="welcomeMsg">
                 </div>
                 <div class="type-buttons">
                     <div class="type-btn active" id="htmlBtn" onclick="selectType('html')">💻 HTML</div>
@@ -99,9 +94,18 @@
         const API_URL = 'https://app-builder-production-ab4d.up.railway.app';
         let appType = 'html';
         let selectedFps = 90;
+        
+        // تحميل الكود من AI لو موجود
+        const aiCode = localStorage.getItem('generated-code');
+        if (aiCode) {
+            document.getElementById('htmlCode').value = aiCode;
+            localStorage.removeItem('generated-code');
+        }
+        
         function selectType(type) { appType = type; document.getElementById('htmlBtn').classList.toggle('active', type==='html'); document.getElementById('webviewBtn').classList.toggle('active', type==='webview'); document.getElementById('htmlSection').style.display = type==='html' ? 'block' : 'none'; document.getElementById('urlSection').style.display = type==='webview' ? 'block' : 'none'; }
         function selectFps(el, fps) { selectedFps = fps; document.querySelectorAll('.fps-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
         function previewIcon(input) { const f = input.files[0]; if (f) { const r = new FileReader(); r.onload = e => { document.getElementById('iconPreview').src = e.target.result; document.getElementById('iconPreview').style.display = 'block'; document.getElementById('iconText').textContent = '✅ ' + f.name; }; r.readAsDataURL(f); } }
+        
         document.getElementById('createForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('submitBtn');
@@ -113,7 +117,6 @@
             fd.append('content', appType === 'html' ? document.getElementById('htmlCode').value : document.getElementById('appUrl').value);
             fd.append('description', document.getElementById('appDescription').value);
             fd.append('fps', selectedFps);
-            fd.append('welcome_message', document.getElementById('welcomeMsg').value);
             const icon = document.getElementById('appIcon').files[0];
             if (icon) fd.append('icon', icon);
             try {
