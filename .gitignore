@@ -1,3 +1,5 @@
-.vercel
-.env*
-firebase-key.json
+node_modules/
+uploads/
+apps_data/
+.env
+.railway/

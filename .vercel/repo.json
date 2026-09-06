@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_Ngf8dr75YeHkQaz4XBAJc0ldXtmX",
+      "name": "app-builder",
+      "directory": ".",
+      "orgId": "team_yoHM9p7P59rB7dnmvwRDnIRx"
+    }
+  ]
+}
