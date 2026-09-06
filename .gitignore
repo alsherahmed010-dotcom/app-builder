@@ -3,3 +3,5 @@ uploads/
 apps_data/
 .env
 .railway/
+
+firebase-key.json
