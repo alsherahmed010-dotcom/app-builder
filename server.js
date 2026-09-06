@@ -27,18 +27,13 @@ function saveApps() {
     fs.writeFileSync('apps.json', JSON.stringify(apps, null, 2));
 }
 
-const keystorePath = path.join(__dirname, 'debug.keystore');
-if (!fs.existsSync(keystorePath)) {
-    exec(`keytool -genkey -v -keystore ${keystorePath} -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"`, (err) => {});
-}
-
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
 app.post('/api/apps', upload.single('icon'), (req, res) => {
     const { name, package_name, app_type, content, description, fps, welcome_message, exit_message } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     
-    const app = {
+    const appData = {
         id: Date.now(),
         name: name || 'App',
         package_name: package_name || 'com.app.app',
@@ -54,9 +49,9 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
         createdAt: Date.now()
     };
     
-    apps.unshift(app);
+    apps.unshift(appData);
     saveApps();
-    res.json({ success: true, app });
+    res.json({ success: true, app: appData });
 });
 
 app.get('/api/apps', (req, res) => {
@@ -64,9 +59,9 @@ app.get('/api/apps', (req, res) => {
 });
 
 app.get('/api/apps/:id', (req, res) => {
-    const app = apps.find(a => a.id === parseInt(req.params.id));
-    if (!app) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true, app });
+    const appData = apps.find(a => a.id === parseInt(req.params.id));
+    if (!appData) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, app: appData });
 });
 
 app.put('/api/apps/:id', upload.single('icon'), (req, res) => {
@@ -93,7 +88,6 @@ app.delete('/api/apps/:id', (req, res) => {
     res.json({ success: true });
 });
 
-// بناء APK حقيقي
 app.post('/api/build/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     const appData = apps.find(a => a.id === id);
@@ -108,7 +102,6 @@ app.post('/api/build/:id', async (req, res) => {
         const appDir = path.join(__dirname, 'builds', String(id));
         
         fs.mkdirSync(`${appDir}/assets`, { recursive: true });
-        fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
         fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
         
         let htmlContent = appData.content || '<h1>App</h1>';
@@ -128,6 +121,7 @@ app.post('/api/build/:id', async (req, res) => {
             if (fs.existsSync(p)) {
                 const buf = fs.readFileSync(p);
                 if (buf[0] === 0x89 && buf[1] === 0x50) {
+                    fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
                     fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`);
                     hasIcon = true;
                 }
@@ -168,14 +162,11 @@ public class MainActivity extends Activity {
     }
 }`);
         
-        const resCompile = hasIcon ? '$ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip &&' : '';
-        const linkRes = hasIcon ? 'compiled.zip' : '';
-        
         const buildCmd = `cd ${appDir} && \
-        ${resCompile} \
+        $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && \
         javac -source 1.7 -target 1.7 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java 2>/dev/null && \
         $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && \
-        $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets ${linkRes} && \
+        $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets compiled.zip && \
         $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && \
         $ANDROID_HOME/build-tools/34.0.0/zipalign -p -f 4 unaligned.apk app-final.apk && \
         cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null; \
@@ -189,7 +180,7 @@ public class MainActivity extends Activity {
             } else {
                 appData.apk_url = `/builds/${id}/final.apk`;
                 appData.status = 'completed';
-                console.log(`✅ Built: ${appData.apk_url}`);
+                console.log('✅ Built');
             }
             saveApps();
         });
@@ -201,15 +192,15 @@ public class MainActivity extends Activity {
 });
 
 app.get('/api/build-status/:id', (req, res) => {
-    const app = apps.find(a => a.id === parseInt(req.params.id));
-    if (!app) return res.status(404).json({ error: 'Not found' });
-    res.json({ status: app.status, apk_url: app.apk_url });
+    const appData = apps.find(a => a.id === parseInt(req.params.id));
+    if (!appData) return res.status(404).json({ error: 'Not found' });
+    res.json({ status: appData.status, apk_url: appData.apk_url });
 });
 
 app.get('/api/download/:id', (req, res) => {
-    const app = apps.find(a => a.id === parseInt(req.params.id));
-    if (!app || !app.apk_url) return res.status(404).json({ error: 'Not found' });
-    res.download(path.join(__dirname, app.apk_url), `${app.name}.apk`);
+    const appData = apps.find(a => a.id === parseInt(req.params.id));
+    if (!appData || !appData.apk_url) return res.status(404).json({ error: 'Not found' });
+    res.download(path.join(__dirname, appData.apk_url), `${appData.name}.apk`);
 });
 
 const PORT = process.env.PORT || 8080;
