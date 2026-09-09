@@ -29,14 +29,14 @@ if (fs.existsSync('notifications.json')) {
     notifications = JSON.parse(fs.readFileSync('notifications.json', 'utf8'));
 }
 
-let deviceTokens = [];
-if (fs.existsSync('tokens.json')) {
-    deviceTokens = JSON.parse(fs.readFileSync('tokens.json', 'utf8'));
+let users = {};
+if (fs.existsSync('users.json')) {
+    users = JSON.parse(fs.readFileSync('users.json', 'utf8'));
 }
 
 function saveApps() { fs.writeFileSync('apps.json', JSON.stringify(apps, null, 2)); }
 function saveNotifications() { fs.writeFileSync('notifications.json', JSON.stringify(notifications, null, 2)); }
-function saveTokens() { fs.writeFileSync('tokens.json', JSON.stringify(deviceTokens, null, 2)); }
+function saveUsers() { fs.writeFileSync('users.json', JSON.stringify(users, null, 2)); }
 
 // FCM Configuration
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'pubg-skin-362e2';
@@ -137,25 +137,49 @@ const PERMISSIONS_MAP = {
     'WAKE_LOCK': 'android.permission.WAKE_LOCK'
 };
 
+// تسجيل مستخدم/جهاز
 app.post('/api/register-device', (req, res) => {
-    const { app_id, token } = req.body;
+    const { app_id, token, device_id } = req.body;
     if (!app_id || !token) return res.status(400).json({ error: 'Missing app_id or token' });
     
-    const existing = deviceTokens.findIndex(d => d.token === token && d.app_id === app_id);
-    if (existing === -1) {
-        deviceTokens.push({ app_id, token, created_at: Date.now() });
-        saveTokens();
+    const appId = String(app_id);
+    
+    if (!users[appId]) {
+        users[appId] = {};
     }
     
-    res.json({ success: true, total_devices: deviceTokens.length });
+    // استخدام device_id كمفتاح فريد
+    const uniqueId = device_id || token;
+    
+    if (!users[appId][uniqueId]) {
+        users[appId][uniqueId] = {
+            token: token,
+            device_id: device_id || null,
+            first_seen: Date.now(),
+            last_seen: Date.now(),
+            open_count: 1
+        };
+    } else {
+        users[appId][uniqueId].token = token;
+        users[appId][uniqueId].last_seen = Date.now();
+        users[appId][uniqueId].open_count++;
+    }
+    
+    saveUsers();
+    
+    const userCount = Object.keys(users[appId]).length;
+    
+    res.json({ success: true, total_users: userCount });
 });
 
+// إرسال إشعار
 app.post('/api/notifications', async (req, res) => {
     const { app_id, title, message } = req.body;
+    const appId = String(app_id);
     
     const notification = {
         id: Date.now(),
-        app_id,
+        app_id: appId,
         title,
         message,
         created_at: Date.now()
@@ -163,13 +187,15 @@ app.post('/api/notifications', async (req, res) => {
     notifications.unshift(notification);
     saveNotifications();
     
-    const appTokens = deviceTokens.filter(d => d.app_id === parseInt(app_id));
+    // جمع كل التوكنز للمستخدمين
+    const appUsers = users[appId] || {};
+    const allTokens = Object.values(appUsers).map(u => u.token).filter(Boolean);
     
     let sentCount = 0;
     const results = [];
     
-    for (const deviceToken of appTokens) {
-        const result = await sendFCMMessage(deviceToken.token, title, message, app_id);
+    for (const token of allTokens) {
+        const result = await sendFCMMessage(token, title, message, appId);
         if (result.success) sentCount++;
         results.push(result);
     }
@@ -178,32 +204,31 @@ app.post('/api/notifications', async (req, res) => {
         success: true, 
         notification, 
         sent_to: sentCount,
-        total_devices: appTokens.length,
+        total_users: allTokens.length,
         results
     });
 });
 
+// جلب الإشعارات
 app.get('/api/notifications/:app_id', (req, res) => {
-    const appNotifications = notifications.filter(n => n.app_id === parseInt(req.params.app_id));
+    const appNotifications = notifications.filter(n => n.app_id === String(req.params.app_id));
     res.json({ success: true, notifications: appNotifications });
 });
 
-let stats = {};
-if (fs.existsSync('stats.json')) {
-    stats = JSON.parse(fs.readFileSync('stats.json', 'utf8'));
-}
-
-app.post('/api/stats/:app_id', (req, res) => {
-    const appId = req.params.app_id;
-    if (!stats[appId]) stats[appId] = { opens: 0, installs: 0 };
-    stats[appId].opens++;
-    fs.writeFileSync('stats.json', JSON.stringify(stats, null, 2));
-    res.json({ success: true });
-});
-
-app.get('/api/stats/:app_id', (req, res) => {
-    const appId = req.params.app_id;
-    res.json({ success: true, stats: stats[appId] || { opens: 0, installs: 0 } });
+// إحصائيات المستخدمين
+app.get('/api/users/:app_id', (req, res) => {
+    const appId = String(req.params.app_id);
+    const appUsers = users[appId] || {};
+    const userList = Object.values(appUsers);
+    
+    res.json({
+        success: true,
+        total_users: userList.length,
+        users: userList.map(u => ({
+            last_seen: u.last_seen,
+            open_count: u.open_count
+        }))
+    });
 });
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
@@ -217,11 +242,13 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
         try {
             selectedPermissions = JSON.parse(permissions);
         } catch(e) {
-            selectedPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE', 'POST_NOTIFICATIONS'];
+            selectedPermissions = [];
         }
-    } else {
-        selectedPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE', 'POST_NOTIFICATIONS'];
     }
+    
+    // الأذونات الإجبارية
+    const mandatoryPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE'];
+    const finalPermissions = [...new Set([...mandatoryPermissions, ...selectedPermissions])];
     
     const appData = {
         id: Date.now(),
@@ -234,7 +261,7 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
         welcome_message,
         exit_message,
         icon_url,
-        permissions: selectedPermissions,
+        permissions: finalPermissions,
         status: 'pending',
         apk_url: null,
         version: 1,
@@ -271,7 +298,9 @@ app.put('/api/apps/:id', upload.single('icon'), (req, res) => {
     if (req.file) apps[index].icon_url = `/uploads/${req.file.filename}`;
     if (permissions) {
         try {
-            apps[index].permissions = JSON.parse(permissions);
+            const selectedPermissions = JSON.parse(permissions);
+            const mandatoryPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE'];
+            apps[index].permissions = [...new Set([...mandatoryPermissions, ...selectedPermissions])];
         } catch(e) {}
     }
     
@@ -317,21 +346,6 @@ app.get('/api/live-content/:id', (req, res) => {
     res.send(content);
 });
 
-app.get('/api/check-update/:id', (req, res) => {
-    const appData = apps.find(a => a.id === parseInt(req.params.id));
-    if (!appData) return res.status(404).json({ error: 'Not found' });
-    
-    const currentVersion = parseInt(req.query.version) || 0;
-    const hasUpdate = appData.version > currentVersion;
-    
-    res.json({ 
-        success: true, 
-        has_update: hasUpdate,
-        current_version: appData.version,
-        update_url: hasUpdate ? `/builds/${appData.id}/final.apk` : null
-    });
-});
-
 app.post('/api/build/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const appData = apps.find(a => a.id === id);
@@ -365,10 +379,41 @@ app.post('/api/build/:id', (req, res) => {
         }
     </style></head>`);
     
+    // توليد device_id فريد وتسجيل المستخدم
     htmlContent += `<script>
 (function(){
     var apiBase = '${req.protocol}://${req.get('host')}';
     var appId = ${id};
+    
+    // توليد device_id فريد
+    function getDeviceId() {
+        var deviceId = localStorage.getItem('device_id');
+        if (!deviceId) {
+            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('device_id', deviceId);
+        }
+        return deviceId;
+    }
+    
+    // تسجيل المستخدم
+    function registerUser() {
+        var deviceId = getDeviceId();
+        var token = deviceId; // نستخدم device_id كتوكن مؤقت
+        
+        fetch(apiBase + '/api/register-device', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                app_id: appId,
+                token: token,
+                device_id: deviceId
+            })
+        }).then(function(r) { return r.json(); })
+        .then(function(data) {
+            console.log('Registered:', data);
+        })
+        .catch(function() {});
+    }
     
     var dbName = 'app_db_' + appId;
     var storeName = 'content_store';
@@ -415,11 +460,6 @@ app.post('/api/build/:id', (req, res) => {
         }
     }
     
-    function sendStats() {
-        fetch(apiBase + '/api/stats/' + appId, {method: 'POST'})
-            .catch(function() {});
-    }
-    
     function checkUpdate() {
         fetch(apiBase + '/api/live-content/' + appId)
             .then(function(r) { return r.text(); })
@@ -443,6 +483,9 @@ app.post('/api/build/:id', (req, res) => {
             });
     }
     
+    // تسجيل المستخدم فوراً
+    registerUser();
+    
     openDB().then(function(db) {
         loadContent(db).then(function(savedContent) {
             if (savedContent) {
@@ -450,12 +493,14 @@ app.post('/api/build/:id', (req, res) => {
             }
             if (navigator.onLine) {
                 checkUpdate();
-                sendStats();
             }
         });
     });
     
-    window.addEventListener('online', checkUpdate);
+    window.addEventListener('online', function() {
+        registerUser();
+        checkUpdate();
+    });
 })();
 </script>`;
     
@@ -488,8 +533,8 @@ app.post('/api/build/:id', (req, res) => {
         }
     }
     
-    // بناء الأذونات
-    const selectedPermissions = appData.permissions || ['INTERNET', 'ACCESS_NETWORK_STATE', 'POST_NOTIFICATIONS'];
+    // بناء الأذونات - المحددة فقط
+    const selectedPermissions = appData.permissions || ['INTERNET', 'ACCESS_NETWORK_STATE'];
     const permissionsLines = selectedPermissions.map(p => {
         const perm = PERMISSIONS_MAP[p];
         return perm ? `    <uses-permission android:name="${perm}" />` : '';
@@ -500,7 +545,7 @@ app.post('/api/build/:id', (req, res) => {
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
 ${permissionsLines}
     
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true">
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
         <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
