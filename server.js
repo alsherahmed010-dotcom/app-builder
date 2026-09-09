@@ -38,7 +38,7 @@ function saveApps() { fs.writeFileSync('apps.json', JSON.stringify(apps, null, 2
 function saveNotifications() { fs.writeFileSync('notifications.json', JSON.stringify(notifications, null, 2)); }
 function saveTokens() { fs.writeFileSync('tokens.json', JSON.stringify(deviceTokens, null, 2)); }
 
-// FCM Configuration من متغيرات البيئة
+// FCM Configuration
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'pubg-skin-362e2';
 const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL;
 const PRIVATE_KEY = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -99,6 +99,43 @@ async function sendFCMMessage(token, title, body, appId) {
         return { success: false, error: error.message };
     }
 }
+
+// خريطة الأذونات
+const PERMISSIONS_MAP = {
+    'INTERNET': 'android.permission.INTERNET',
+    'ACCESS_NETWORK_STATE': 'android.permission.ACCESS_NETWORK_STATE',
+    'POST_NOTIFICATIONS': 'android.permission.POST_NOTIFICATIONS',
+    'CAMERA': 'android.permission.CAMERA',
+    'RECORD_AUDIO': 'android.permission.RECORD_AUDIO',
+    'READ_MEDIA_IMAGES': 'android.permission.READ_MEDIA_IMAGES',
+    'READ_MEDIA_VIDEO': 'android.permission.READ_MEDIA_VIDEO',
+    'READ_MEDIA_AUDIO': 'android.permission.READ_MEDIA_AUDIO',
+    'READ_EXTERNAL_STORAGE': 'android.permission.READ_EXTERNAL_STORAGE',
+    'WRITE_EXTERNAL_STORAGE': 'android.permission.WRITE_EXTERNAL_STORAGE',
+    'MANAGE_EXTERNAL_STORAGE': 'android.permission.MANAGE_EXTERNAL_STORAGE',
+    'ACCESS_FINE_LOCATION': 'android.permission.ACCESS_FINE_LOCATION',
+    'ACCESS_COARSE_LOCATION': 'android.permission.ACCESS_COARSE_LOCATION',
+    'READ_CONTACTS': 'android.permission.READ_CONTACTS',
+    'WRITE_CONTACTS': 'android.permission.WRITE_CONTACTS',
+    'READ_SMS': 'android.permission.READ_SMS',
+    'SEND_SMS': 'android.permission.SEND_SMS',
+    'RECEIVE_SMS': 'android.permission.RECEIVE_SMS',
+    'READ_PHONE_STATE': 'android.permission.READ_PHONE_STATE',
+    'BLUETOOTH': 'android.permission.BLUETOOTH',
+    'BLUETOOTH_ADMIN': 'android.permission.BLUETOOTH_ADMIN',
+    'NFC': 'android.permission.NFC',
+    'CALL_PHONE': 'android.permission.CALL_PHONE',
+    'PROCESS_OUTGOING_CALLS': 'android.permission.PROCESS_OUTGOING_CALLS',
+    'READ_CALL_LOG': 'android.permission.READ_CALL_LOG',
+    'WRITE_CALL_LOG': 'android.permission.WRITE_CALL_LOG',
+    'SYSTEM_ALERT_WINDOW': 'android.permission.SYSTEM_ALERT_WINDOW',
+    'WRITE_SETTINGS': 'android.permission.WRITE_SETTINGS',
+    'FACTORY_TEST': 'android.permission.FACTORY_TEST',
+    'REBOOT': 'android.permission.REBOOT',
+    'MASTER_CLEAR': 'android.permission.MASTER_CLEAR',
+    'VIBRATE': 'android.permission.VIBRATE',
+    'WAKE_LOCK': 'android.permission.WAKE_LOCK'
+};
 
 app.post('/api/register-device', (req, res) => {
     const { app_id, token } = req.body;
@@ -172,8 +209,19 @@ app.get('/api/stats/:app_id', (req, res) => {
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
 app.post('/api/apps', upload.single('icon'), (req, res) => {
-    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message } = req.body;
+    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, permissions } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
+    
+    let selectedPermissions = [];
+    if (permissions) {
+        try {
+            selectedPermissions = JSON.parse(permissions);
+        } catch(e) {
+            selectedPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE', 'POST_NOTIFICATIONS'];
+        }
+    } else {
+        selectedPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE', 'POST_NOTIFICATIONS'];
+    }
     
     const appData = {
         id: Date.now(),
@@ -186,6 +234,7 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
         welcome_message,
         exit_message,
         icon_url,
+        permissions: selectedPermissions,
         status: 'pending',
         apk_url: null,
         version: 1,
@@ -212,7 +261,7 @@ app.put('/api/apps/:id', upload.single('icon'), (req, res) => {
     const index = apps.findIndex(a => a.id === id);
     if (index === -1) return res.status(404).json({ error: 'Not found' });
     
-    const { name, package_name, content, description, welcome_message, exit_message } = req.body;
+    const { name, package_name, content, description, welcome_message, exit_message, permissions } = req.body;
     if (name) apps[index].name = name;
     if (package_name) apps[index].package_name = package_name;
     if (content) apps[index].content = content;
@@ -220,6 +269,11 @@ app.put('/api/apps/:id', upload.single('icon'), (req, res) => {
     if (welcome_message) apps[index].welcome_message = welcome_message;
     if (exit_message) apps[index].exit_message = exit_message;
     if (req.file) apps[index].icon_url = `/uploads/${req.file.filename}`;
+    if (permissions) {
+        try {
+            apps[index].permissions = JSON.parse(permissions);
+        } catch(e) {}
+    }
     
     apps[index].version = (apps[index].version || 1) + 1;
     
@@ -434,16 +488,19 @@ app.post('/api/build/:id', (req, res) => {
         }
     }
     
+    // بناء الأذونات
+    const selectedPermissions = appData.permissions || ['INTERNET', 'ACCESS_NETWORK_STATE', 'POST_NOTIFICATIONS'];
+    const permissionsLines = selectedPermissions.map(p => {
+        const perm = PERMISSIONS_MAP[p];
+        return perm ? `    <uses-permission android:name="${perm}" />` : '';
+    }).filter(Boolean).join('\n');
+    
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+${permissionsLines}
     
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true">
         <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
