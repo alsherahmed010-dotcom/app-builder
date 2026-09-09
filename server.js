@@ -61,36 +61,19 @@ async function getAccessToken() {
 async function sendFCMMessage(token, title, body, appId) {
     try {
         const accessToken = await getAccessToken();
-        
         const message = {
             message: {
                 token: token,
-                notification: {
-                    title: title,
-                    body: body
-                },
-                data: {
-                    app_id: String(appId)
-                },
-                android: {
-                    priority: 'high',
-                    notification: {
-                        sound: 'default',
-                        channel_id: 'default'
-                    }
-                }
+                notification: { title: title, body: body },
+                data: { app_id: String(appId) },
+                android: { priority: 'high', notification: { sound: 'default', channel_id: 'default' } }
             }
         };
-        
         const response = await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(message)
         });
-        
         const result = await response.json();
         console.log('FCM Response:', result);
         return { success: true, result };
@@ -100,7 +83,6 @@ async function sendFCMMessage(token, title, body, appId) {
     }
 }
 
-// خريطة الأذونات
 const PERMISSIONS_MAP = {
     'INTERNET': 'android.permission.INTERNET',
     'ACCESS_NETWORK_STATE': 'android.permission.ACCESS_NETWORK_STATE',
@@ -137,18 +119,14 @@ const PERMISSIONS_MAP = {
     'WAKE_LOCK': 'android.permission.WAKE_LOCK'
 };
 
-// تسجيل مستخدم/جهاز
+// تسجيل مستخدم
 app.post('/api/register-device', (req, res) => {
     const { app_id, token, device_id } = req.body;
     if (!app_id || !token) return res.status(400).json({ error: 'Missing app_id or token' });
     
     const appId = String(app_id);
+    if (!users[appId]) users[appId] = {};
     
-    if (!users[appId]) {
-        users[appId] = {};
-    }
-    
-    // استخدام device_id كمفتاح فريد
     const uniqueId = device_id || token;
     
     if (!users[appId][uniqueId]) {
@@ -166,9 +144,7 @@ app.post('/api/register-device', (req, res) => {
     }
     
     saveUsers();
-    
     const userCount = Object.keys(users[appId]).length;
-    
     res.json({ success: true, total_users: userCount });
 });
 
@@ -187,7 +163,6 @@ app.post('/api/notifications', async (req, res) => {
     notifications.unshift(notification);
     saveNotifications();
     
-    // جمع كل التوكنز للمستخدمين
     const appUsers = users[appId] || {};
     const allTokens = Object.values(appUsers).map(u => u.token).filter(Boolean);
     
@@ -209,7 +184,6 @@ app.post('/api/notifications', async (req, res) => {
     });
 });
 
-// جلب الإشعارات
 app.get('/api/notifications/:app_id', (req, res) => {
     const appNotifications = notifications.filter(n => n.app_id === String(req.params.app_id));
     res.json({ success: true, notifications: appNotifications });
@@ -246,7 +220,6 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
         }
     }
     
-    // الأذونات الإجبارية
     const mandatoryPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE'];
     const finalPermissions = [...new Set([...mandatoryPermissions, ...selectedPermissions])];
     
@@ -305,7 +278,6 @@ app.put('/api/apps/:id', upload.single('icon'), (req, res) => {
     }
     
     apps[index].version = (apps[index].version || 1) + 1;
-    
     saveApps();
     res.json({ success: true, message: 'Update saved', version: apps[index].version });
 });
@@ -370,22 +342,14 @@ app.post('/api/build/:id', (req, res) => {
     
     htmlContent = htmlContent.replace('</head>', `<style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { 
-            width: 100%; 
-            height: 100%; 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            overflow: hidden;
-        }
+        html, body { width: 100%; height: 100%; margin: 0 !important; padding: 0 !important; overflow: hidden; }
     </style></head>`);
     
-    // توليد device_id فريد وتسجيل المستخدم
     htmlContent += `<script>
 (function(){
     var apiBase = '${req.protocol}://${req.get('host')}';
     var appId = ${id};
     
-    // توليد device_id فريد
     function getDeviceId() {
         var deviceId = localStorage.getItem('device_id');
         if (!deviceId) {
@@ -395,23 +359,14 @@ app.post('/api/build/:id', (req, res) => {
         return deviceId;
     }
     
-    // تسجيل المستخدم
     function registerUser() {
         var deviceId = getDeviceId();
-        var token = deviceId; // نستخدم device_id كتوكن مؤقت
-        
         fetch(apiBase + '/api/register-device', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                app_id: appId,
-                token: token,
-                device_id: deviceId
-            })
+            body: JSON.stringify({ app_id: appId, token: deviceId, device_id: deviceId })
         }).then(function(r) { return r.json(); })
-        .then(function(data) {
-            console.log('Registered:', data);
-        })
+        .then(function(data) { console.log('Registered:', data); })
         .catch(function() {});
     }
     
@@ -483,7 +438,6 @@ app.post('/api/build/:id', (req, res) => {
             });
     }
     
-    // تسجيل المستخدم فوراً
     registerUser();
     
     openDB().then(function(db) {
@@ -533,7 +487,6 @@ app.post('/api/build/:id', (req, res) => {
         }
     }
     
-    // بناء الأذونات - المحددة فقط
     const selectedPermissions = appData.permissions || ['INTERNET', 'ACCESS_NETWORK_STATE'];
     const permissionsLines = selectedPermissions.map(p => {
         const perm = PERMISSIONS_MAP[p];
@@ -571,10 +524,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             Window window = getWindow();
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -589,7 +540,6 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             );
         }
-        
         WebView w = new WebView(this);
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
@@ -602,7 +552,6 @@ public class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         s.setSupportZoom(false);
-        
         w.setWebViewClient(new WebViewClient());
         w.setBackgroundColor(Color.BLACK);
         w.setPadding(0, 0, 0, 0);
