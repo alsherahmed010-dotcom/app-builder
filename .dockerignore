@@ -1,6 +1,10 @@
 node_modules
-.env
 .git
-uploads
 builds
+uploads
 *.log
+.env
+config
+firebase-key.json
+private_key.txt
+server.js.backup
