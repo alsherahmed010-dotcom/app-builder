@@ -8,3 +8,6 @@ update_fcm.js
 config/service-account.json
 firebase-key.json
 *.json
+config/service-account.json
+firebase-key.json
+.env
