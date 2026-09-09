@@ -38,7 +38,7 @@ function saveApps() { fs.writeFileSync('apps.json', JSON.stringify(apps, null, 2
 function saveNotifications() { fs.writeFileSync('notifications.json', JSON.stringify(notifications, null, 2)); }
 function saveUsers() { fs.writeFileSync('users.json', JSON.stringify(users, null, 2)); }
 
-// FCM Configuration
+// FCM
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'pubg-skin-362e2';
 const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL;
 const PRIVATE_KEY = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -83,6 +83,7 @@ async function sendFCMMessage(token, title, body, appId) {
     }
 }
 
+// خريطة الأذونات
 const PERMISSIONS_MAP = {
     'INTERNET': 'android.permission.INTERNET',
     'ACCESS_NETWORK_STATE': 'android.permission.ACCESS_NETWORK_STATE',
@@ -107,21 +108,15 @@ const PERMISSIONS_MAP = {
     'BLUETOOTH_ADMIN': 'android.permission.BLUETOOTH_ADMIN',
     'NFC': 'android.permission.NFC',
     'CALL_PHONE': 'android.permission.CALL_PHONE',
-    'PROCESS_OUTGOING_CALLS': 'android.permission.PROCESS_OUTGOING_CALLS',
-    'READ_CALL_LOG': 'android.permission.READ_CALL_LOG',
-    'WRITE_CALL_LOG': 'android.permission.WRITE_CALL_LOG',
-    'SYSTEM_ALERT_WINDOW': 'android.permission.SYSTEM_ALERT_WINDOW',
-    'WRITE_SETTINGS': 'android.permission.WRITE_SETTINGS',
-    'FACTORY_TEST': 'android.permission.FACTORY_TEST',
-    'REBOOT': 'android.permission.REBOOT',
-    'MASTER_CLEAR': 'android.permission.MASTER_CLEAR',
     'VIBRATE': 'android.permission.VIBRATE',
     'WAKE_LOCK': 'android.permission.WAKE_LOCK'
 };
 
-// تسجيل مستخدم
+// تسجيل مستخدم - مع تسجيل مبسط
 app.post('/api/register-device', (req, res) => {
     const { app_id, token, device_id } = req.body;
+    console.log('Registering device:', { app_id, token: token?.substring(0, 20), device_id: device_id?.substring(0, 20) });
+    
     if (!app_id || !token) return res.status(400).json({ error: 'Missing app_id or token' });
     
     const appId = String(app_id);
@@ -137,6 +132,7 @@ app.post('/api/register-device', (req, res) => {
             last_seen: Date.now(),
             open_count: 1
         };
+        console.log('New user registered! Total:', Object.keys(users[appId]).length);
     } else {
         users[appId][uniqueId].token = token;
         users[appId][uniqueId].last_seen = Date.now();
@@ -166,6 +162,8 @@ app.post('/api/notifications', async (req, res) => {
     const appUsers = users[appId] || {};
     const allTokens = Object.values(appUsers).map(u => u.token).filter(Boolean);
     
+    console.log('Sending notification to', allTokens.length, 'users');
+    
     let sentCount = 0;
     const results = [];
     
@@ -189,7 +187,6 @@ app.get('/api/notifications/:app_id', (req, res) => {
     res.json({ success: true, notifications: appNotifications });
 });
 
-// إحصائيات المستخدمين
 app.get('/api/users/:app_id', (req, res) => {
     const appId = String(req.params.app_id);
     const appUsers = users[appId] || {};
@@ -213,11 +210,7 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
     
     let selectedPermissions = [];
     if (permissions) {
-        try {
-            selectedPermissions = JSON.parse(permissions);
-        } catch(e) {
-            selectedPermissions = [];
-        }
+        try { selectedPermissions = JSON.parse(permissions); } catch(e) {}
     }
     
     const mandatoryPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE'];
@@ -345,30 +338,52 @@ app.post('/api/build/:id', (req, res) => {
         html, body { width: 100%; height: 100%; margin: 0 !important; padding: 0 !important; overflow: hidden; }
     </style></head>`);
     
+    // تسجيل المستخدم - بسيط وفوري
     htmlContent += `<script>
 (function(){
     var apiBase = '${req.protocol}://${req.get('host')}';
     var appId = ${id};
     
+    // توليد device_id
     function getDeviceId() {
-        var deviceId = localStorage.getItem('device_id');
-        if (!deviceId) {
-            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('device_id', deviceId);
+        try {
+            var deviceId = localStorage.getItem('device_id');
+            if (!deviceId) {
+                deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('device_id', deviceId);
+            }
+            return deviceId;
+        } catch(e) {
+            return 'device_' + Date.now();
         }
-        return deviceId;
     }
     
+    // تسجيل المستخدم فوراً
     function registerUser() {
-        var deviceId = getDeviceId();
-        fetch(apiBase + '/api/register-device', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ app_id: appId, token: deviceId, device_id: deviceId })
-        }).then(function(r) { return r.json(); })
-        .then(function(data) { console.log('Registered:', data); })
-        .catch(function() {});
+        try {
+            var deviceId = getDeviceId();
+            fetch(apiBase + '/api/register-device', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    app_id: appId,
+                    token: deviceId,
+                    device_id: deviceId
+                })
+            }).then(function(r) { return r.json(); })
+            .then(function(data) {
+                console.log('✅ Registered! Total users:', data.total_users);
+            })
+            .catch(function(err) {
+                console.log('Registration failed:', err);
+            });
+        } catch(e) {
+            console.log('Error registering:', e);
+        }
     }
+    
+    // تسجيل فوري
+    registerUser();
     
     var dbName = 'app_db_' + appId;
     var storeName = 'content_store';
@@ -438,8 +453,6 @@ app.post('/api/build/:id', (req, res) => {
             });
     }
     
-    registerUser();
-    
     openDB().then(function(db) {
         loadContent(db).then(function(savedContent) {
             if (savedContent) {
@@ -487,6 +500,7 @@ app.post('/api/build/:id', (req, res) => {
         }
     }
     
+    // الأذونات - المحددة فقط + الأساسية
     const selectedPermissions = appData.permissions || ['INTERNET', 'ACCESS_NETWORK_STATE'];
     const permissionsLines = selectedPermissions.map(p => {
         const perm = PERMISSIONS_MAP[p];
