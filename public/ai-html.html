@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <title>AI Chat</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { font-family: 'Cairo', sans-serif; background: #0d1117; height: 100dvh; color: #e6edf3; display: flex; flex-direction: column; overflow: hidden; }
+        .navbar { background: #161b22; padding: 10px 15px; border-bottom: 1px solid #30363d; display: flex; justify-content: center; gap: 15px; align-items: center; flex-shrink: 0; }
+        .nav-btn { padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; background: #21262d; color: #c9d1d9; cursor: pointer; border: none; }
+        .chat-wrap { flex: 1; overflow-y: auto; width: 100%; margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; -webkit-overflow-scrolling: touch; }
+        .msg { display: flex; gap: 10px; width: 100%; }
+        .msg.user { flex-direction: row-reverse; }
+        .av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; background: #238636; }
+        .msg.user .av { background: #1f6feb; }
+        .bub { background: #161b22; border: 1px solid #30363d; border-radius: 14px; padding: 10px 13px; font-size: 13px; line-height: 1.6; color: #fff; max-width: 88%; word-break: break-word; }
+        .msg.user .bub { background: #1f6feb20; border-color: #1f6feb50; }
+        .code-box { background: #010409; border: 1px solid #30363d; border-radius: 8px; margin: 10px -5px; width: calc(100% + 10px); overflow: hidden; }
+        .code-header { background: #161b22; padding: 6px 12px; font-size: 11px; font-weight: bold; color: #8b949e; border-bottom: 1px solid #30363d; }
+        .code { padding: 12px; font-family: monospace; font-size: 12px; color: #3fb950 !important; white-space: pre-wrap; word-wrap: break-word; max-height: 350px; overflow-y: auto; direction: ltr; text-align: left; }
+        .acts { display: flex; gap: 6px; padding: 8px 12px; background: #161b22; border-top: 1px solid #30363d; flex-wrap: wrap; }
+        .ab { padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 700; background: #21262d; color: #c9d1d9; text-decoration: none; }
+        .ab.copy { background: #238636; color: white; }
+        .ab.prev { background: #d29922; color: white; }
+        .ab.use { background: #1f6feb; color: white; }
+        .dots { display: flex; gap: 4px; height: 20px; align-items: center; }
+        .dots span { width: 6px; height: 6px; background: #8b949e; border-radius: 50%; animation: b 1.4s infinite; }
+        .dots span:nth-child(2) { animation-delay: .2s; }
+        .dots span:nth-child(3) { animation-delay: .4s; }
+        @keyframes b { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+        .inp-wrap { background: #0d1117; padding: 10px 15px; border-top: 1px solid #30363d; flex-shrink: 0; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+        .inp-area { display: flex; gap: 8px; width: 100%; align-items: center; }
+        .inp { flex: 1; padding: 10px 15px; background: #161b22; border: 1px solid #30363d; border-radius: 20px; color: #fff; font-size: 13px; font-family: inherit; outline: none; }
+        .inp:focus { border-color: #1f6feb; }
+        .snd { padding: 8px 18px; background: #1f6feb; color: white; border: none; border-radius: 20px; font-weight: 700; cursor: pointer; font-size: 13px; flex-shrink: 0; }
+        .snd:disabled { opacity: .5; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/create.html" class="nav-btn">➕ إنشاء</a>
+        <button class="nav-btn" style="background:#1f6feb;color:white;" onclick="location.href='/ai-html.html'">🤖</button>
+        <a href="/my-apps.html" class="nav-btn">📱 تطبيقاتي</a>
+    </nav>
+    <div class="chat-wrap" id="wrap"></div>
+    <div class="inp-wrap">
+        <div class="inp-area">
+            <input class="inp" id="inp" placeholder="اكتب سؤالك هنا..." onkeypress="if(event.key==='Enter')send()">
+            <button class="snd" id="snd" onclick="send()">إرسال</button>
+        </div>
+    </div>
+    <script>
+        const API_URL = 'https://apihub.agnes-ai.com/v1/chat/completions';
+        const API_KEY = 'sk-eV8aSN0NWxNYGnTdvws5nIGAcMWvUk0G2i0u5MdGIdyl2H1Q';
+        
+        function hist() { try { return JSON.parse(localStorage.getItem('ai_chat') || '[]'); } catch { return []; } }
+        function save(h) { localStorage.setItem('ai_chat', JSON.stringify(h)); }
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        function isH(s) { const t = s.trim(); return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || (t.includes('<') && t.includes('</')); }
+        
+        function render(role, content) {
+            const w = document.getElementById('wrap');
+            const d = document.createElement('div');
+            const cleanRole = (role === 'assistant' || role === 'ai') ? 'ai' : 'user';
+            d.className = 'msg ' + cleanRole;
+            
+            if (cleanRole === 'ai' && content.includes('```')) {
+                const parts = content.split(/(```[\s\S]*?```)/g);
+                let inner = '<div class="av">🤖</div><div class="bub">';
+                parts.forEach(part => {
+                    if (part.startsWith('```') && part.endsWith('```')) {
+                        const code = part.replace(/^```[a-z]*\n?/, '').replace(/```$/, '');
+                        inner += `<div class="code-box"><div class="code-header">كود برمجي</div><pre class="code">${esc(code)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div>`;
+                    } else if (part.trim() !== '') {
+                        inner += `<div style="margin-bottom: 6px;">${esc(part).replace(/\n/g, '<br>')}</div>`;
+                    }
+                });
+                inner += '</div>';
+                d.innerHTML = inner;
+            } else if (cleanRole === 'ai' && isH(content)) {
+                d.innerHTML = `<div class="av">🤖</div><div class="bub"><div style="margin-bottom: 6px;">إليك الكود:</div><div class="code-box"><div class="code-header">HTML</div><pre class="code">${esc(content)}</pre><div class="acts"><button class="ab copy" onclick="cp(this)">📋 نسخ</button><button class="ab prev" onclick="sp(this)">👁️ معاينة</button><button class="ab use" onclick="us(this)">🚀 استخدام</button></div></div></div>`;
+            } else {
+                d.innerHTML = `<div class="av">${cleanRole === 'user' ? '👤' : '🤖'}</div><div class="bub">${esc(content).replace(/\n/g, '<br>')}</div>`;
+            }
+            
+            w.appendChild(d);
+            w.scrollTop = w.scrollHeight;
+        }
+        
+        function load() {
+            document.getElementById('wrap').innerHTML = '';
+            const h = hist();
+            if (h.length === 0) render('ai', 'مرحباً بك! كيف يمكنني مساعدتك اليوم؟');
+            else h.forEach(m => render(m.role, m.content));
+        }
+        
+        function cp(b) { navigator.clipboard.writeText(b.closest('.code-box').querySelector('.code').textContent).then(() => { const old = b.innerHTML; b.innerHTML = '✅ تم'; setTimeout(() => b.innerHTML = old, 2000); }); }
+        function sp(b) { localStorage.setItem('pv', b.closest('.code-box').querySelector('.code').textContent); window.open('/preview.html', '_blank'); }
+        function us(b) { localStorage.setItem('gc', b.closest('.code-box').querySelector('.code').textContent); location.href = '/create.html'; }
+        
+        async function send() {
+            const inp = document.getElementById('inp');
+            const q = inp.value.trim();
+            if (!q) return;
+            
+            render('user', q);
+            inp.value = '';
+            document.getElementById('snd').disabled = true;
+            
+            const typing = document.createElement('div');
+            typing.className = 'msg ai';
+            typing.id = 'typing';
+            typing.innerHTML = '<div class="av">🤖</div><div class="bub"><div class="dots"><span></span><span></span><span></span></div></div>';
+            document.getElementById('wrap').appendChild(typing);
+            document.getElementById('wrap').scrollTop = document.getElementById('wrap').scrollHeight;
+            
+            const h = hist();
+            const api = h.map(m => ({role: (m.role === 'ai' || m.role === 'assistant') ? 'assistant' : 'user', content: m.content}));
+            api.push({role: 'user', content: q});
+            h.push({role: 'user', content: q});
+            save(h);
+            
+            try {
+                const r = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'agnes-2.5-pro',
+                        messages: api,
+                        max_tokens: 4000
+                    })
+                });
+                const data = await r.json();
+                document.getElementById('typing')?.remove();
+                
+                if (data.choices && data.choices[0]) {
+                    const content = data.choices[0].message.content;
+                    h.push({role: 'assistant', content});
+                    save(h);
+                    render('ai', content);
+                } else {
+                    render('ai', '❌ ' + (data.error?.message || 'خطأ'));
+                }
+            } catch(e) {
+                document.getElementById('typing')?.remove();
+                render('ai', '❌ فشل الاتصال');
+            }
+            
+            document.getElementById('snd').disabled = false;
+            document.getElementById('inp').focus();
+        }
+        
+        load();
+        document.getElementById('inp').focus();
+    </script>
+</body>
+</html>

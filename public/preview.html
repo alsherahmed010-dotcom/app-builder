@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><style>*{margin:0;padding:0}body{background:#fff}iframe{width:100%;height:100vh;border:none}</style></head>
+<body>
+<iframe id="f"></iframe>
+<script>
+const c = localStorage.getItem('pv') || '<h1>لا يوجد</h1>';
+document.getElementById('f').srcdoc = c.includes('<!DOCTYPE') ? c : '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' + c + '</body></html>';
+</script>
+</body>
+</html>

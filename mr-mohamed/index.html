@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>مستر محمد فهمي</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
+        body { font-family: 'Cairo', sans-serif; background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); color: #fff; display: flex; align-items: flex-start; justify-content: center; font-size: 19px; padding: 20px 0; }
+        
+        .container { width: 100%; max-width: 550px; display: flex; flex-direction: column; justify-content: center; padding: 15px; position: relative; min-height: 90vh; }
+        .card { background: rgba(255,255,255,.09); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.2); border-radius: 24px; padding: 30px 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        
+        .title { text-align: center; font-size: 32px; font-weight: 900; margin-bottom: 25px; color: #fff; text-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .subtitle { text-align: center; color: #cbd5e1; font-size: 17px; margin-bottom: 18px; }
+        
+        .big-btn { display: block; width: 100%; padding: 22px; margin: 18px 0; border: 2px solid #667eea; border-radius: 18px; background: rgba(102,126,234,.2); color: #fff; font-family: 'Cairo', sans-serif; font-size: 22px; font-weight: 900; cursor: pointer; transition: .3s; text-align: center; }
+        .big-btn.secondary { border-color: #f093fb; background: rgba(240,147,251,.2); }
+        
+        .input { width: 100%; padding: 18px 20px; margin: 12px 0; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); border-radius: 16px; color: #fff; font-family: 'Cairo', sans-serif; font-size: 18px; outline: none; text-align: right; direction: rtl; line-height: normal; }
+        .input::placeholder { color: #aaa; opacity: 1; }
+        .input:focus { border-color: #667eea; background: rgba(255,255,255,.18); }
+        
+        .choice-btn { width: 100%; padding: 15px; margin: 8px 0; border: 1px solid rgba(255,255,255,.3); border-radius: 14px; background: rgba(255,255,255,.1); color: #fff; font-family: 'Cairo', sans-serif; font-size: 18px; font-weight: 700; cursor: pointer; text-align: center; transition: 0.2s; }
+        .choice-btn.selected { background: #667eea; border-color: #667eea; transform: scale(1.02); }
+        
+        .login-btn { width: 100%; padding: 18px; margin-top: 20px; border: none; border-radius: 16px; background: #667eea; color: #fff; font-family: 'Cairo', sans-serif; font-size: 20px; font-weight: 900; cursor: pointer; text-align: center; transition: 0.3s; }
+        .login-btn:disabled { opacity: .6; }
+        
+        .page { display: none; }
+        .page.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .info-box { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22); border-radius: 18px; padding: 20px; margin: 15px 0; text-align: center; }
+        .info-box h3 { color: #f093fb; font-size: 22px; margin-bottom: 12px; }
+        .info-box p { color: #f1f5f9; font-size: 18px; line-height: 1.6; margin-bottom: 8px; }
+        
+        .menu-btn { display: block; width: 100%; padding: 18px; margin: 12px 0; border: none; border-radius: 16px; background: rgba(102,126,234,.25); color: #fff; font-family: 'Cairo', sans-serif; font-size: 20px; font-weight: 900; cursor: pointer; text-align: center; transition: 0.2s; }
+        .back-btn { padding: 12px 24px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); border-radius: 12px; color: #fff; font-family: 'Cairo', sans-serif; cursor: pointer; margin-bottom: 20px; font-size: 16px; font-weight: 700; }
+        
+        .welcome { text-align: center; font-size: 26px; font-weight: 900; color: #f093fb; margin: 20px 0; }
+        .grade-display { text-align: center; font-size: 48px; font-weight: 900; color: #4ade80; margin: 15px 0; }
+        .attendance-display { text-align: center; font-size: 32px; font-weight: 900; color: #f59e0b; margin: 15px 0; }
+        
+        .hidden { display: none !important; }
+        
+        /* تصميم النافذة المنبثقة للإدارة (Modal) */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: 0.3s; padding: 15px; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-card { background: #1a1738; border: 1px solid rgba(245,158,11,0.4); border-radius: 24px; padding: 25px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; position: relative; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+        .close-modal { position: absolute; top: 18px; left: 18px; background: rgba(255,255,255,0.1); border: none; color: #fff; width: 38px; height: 38px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        
+        .admin-link { position: fixed; bottom: 15px; left: 15px; background: rgba(245,158,11,.2); border: 1px solid rgba(245,158,11,.5); color: #f59e0b; padding: 12px 20px; border-radius: 14px; font-size: 18px; font-weight: 900; cursor: pointer; z-index: 100; font-family: 'Cairo', sans-serif; }
+        .admin-btn { display: block; width: 100%; padding: 16px; margin: 10px 0; border: 2px solid #f59e0b; border-radius: 16px; background: rgba(245,158,11,.2); color: #f59e0b; font-family: 'Cairo', sans-serif; font-size: 18px; font-weight: 900; cursor: pointer; text-align: center; }
+        .student-item { background: rgba(0,0,0,.3); padding: 15px; border-radius: 12px; margin: 10px 0; border-right: 5px solid #667eea; text-align: right; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- الصفحة الرئيسية -->
+    <div id="page-login" class="page active">
+        <div class="title" style="font-size: 42px; color: #f093fb; margin-top: 20px;">مستر محمد فهمي</div>
+        <button class="big-btn" onclick="showPage('parent-login')">التسجيل ك ولي امر</button>
+        <button class="big-btn secondary" onclick="showPage('student-login')">التسجيل ك طالب</button>
+    </div>
+
+    <!-- ولي أمر: تسجيل الدخول -->
+    <div id="page-parent-login" class="page">
+        <div class="card">
+            <button class="back-btn" onclick="showPage('login')">← رجوع</button>
+            <div class="title">التسجيل ك ولي امر</div>
+            <input type="text" class="input" id="parentStudentName" placeholder="اسم الطالب ثلاثي" autocomplete="off" dir="rtl">
+            <input type="tel" class="input" id="parentPhone" placeholder="رقم هاتف ولي الامر" autocomplete="off" dir="rtl">
+            
+            <div class="subtitle" style="margin:15px 0 8px; font-size: 18px; font-weight: bold; color: #fff;">المرحلة الدراسية:</div>
+            <button class="choice-btn p-stage" id="p_stage1" onclick="selectParentStage('الصف الاول الثانوي', 'p_stage1')">الصف الاول الثانوي</button>
+            <button class="choice-btn p-stage" id="p_stage2" onclick="selectParentStage('الصف الثاني الثانوي', 'p_stage2')">الصف الثاني الثانوي</button>
+            <button class="choice-btn p-stage" id="p_stage3" onclick="selectParentStage('الصف الثالث الثانوي', 'p_stage3')">الصف الثالث الثانوي</button>
+            
+            <button class="login-btn" id="parentLoginBtn" onclick="parentLogin()">تسجيل دخول</button>
+        </div>
+    </div>
+
+    <!-- ولي أمر: لوحة التحكم -->
+    <div id="page-parent" class="page">
+        <div class="card">
+            <div class="welcome" id="parentWelcome">مرحبا ولي الطالب</div>
+            <div class="info-box">
+                <h3>معلومات المصاريف</h3>
+                <p>فلوس الشهر 550 جنيه</p>
+                <p>+ 50 جنيه فلوس تسجيل الدخول في المنصه</p>
+                <p style="color:#4ade80;font-weight:900;font-size:22px;margin-top:10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">الإجمالي: 600 جنيه</p>
+            </div>
+            <button class="menu-btn" onclick="showPage('grades-search')">الدرجات</button>
+            <button class="menu-btn" onclick="showPage('attendance-search')">الحضور</button>
+        </div>
+    </div>
+
+    <!-- ولي أمر: بحث الدرجات -->
+    <div id="page-grades-search" class="page">
+        <div class="card">
+            <button class="back-btn" onclick="showPage('parent')">← رجوع</button>
+            <div class="title">الدرجات</div>
+            <p style="text-align: center; color: #cbd5e1; margin-bottom: 15px; font-size: 17px;">اكتب اسم الطالب كما مسجل في الدرس للبحث عن درجات اخر تسميع</p>
+            <input type="text" class="input" id="searchGradeInput" placeholder="اسم الطالب..." dir="rtl">
+            <button class="login-btn" onclick="searchGradeByName()">بحث</button>
+            
+            <div id="gradeResultBox" class="hidden" style="margin-top: 25px;">
+                <div class="info-box">
+                    <p style="color:#aaa;font-size:16px;">درجة التسميع</p>
+                    <div class="grade-display" id="gradeValueText">9 من 10</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ولي أمر: بحث الحضور -->
+    <div id="page-attendance-search" class="page">
+        <div class="card">
+            <button class="back-btn" onclick="showPage('parent')">← رجوع</button>
+            <div class="title">الحضور</div>
+            <p style="text-align: center; color: #cbd5e1; margin-bottom: 15px; font-size: 17px;">اكتب اسم الطالب كما مسجل في الدرس</p>
+            <input type="text" class="input" id="searchAttendanceInput" placeholder="اسم الطالب..." dir="rtl">
+            <button class="login-btn" onclick="searchAttendanceByName()">بحث</button>
+            
+            <div id="attendanceResultBox" class="hidden" style="margin-top: 25px;">
+                <div class="info-box">
+                    <div class="attendance-display" id="attendanceValueText">غاب 2 من الحصص</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- طالب: تسجيل الدخول -->
+    <div id="page-student-login" class="page">
+        <div class="card">
+            <button class="back-btn" onclick="showPage('login')">← رجوع</button>
+            <div class="title">التسجيل ك طالب</div>
+            <input type="text" class="input" id="studentName" placeholder="اسم الطالب" autocomplete="off" dir="rtl">
+            <input type="tel" class="input" id="studentPhone" placeholder="رقم هاتف الطالب" autocomplete="off" dir="rtl">
+            
+            <div class="subtitle" style="margin:15px 0 8px; font-size: 18px; font-weight: bold; color: #fff;">المرحلة الدراسية:</div>
+            <button class="choice-btn s-stage" id="s_stage1" onclick="selectStudentStage('الصف الاول الثانوي', 's_stage1')">الصف الاول الثانوي</button>
+            <button class="choice-btn s-stage" id="s_stage2" onclick="selectStudentStage('الصف الثاني الثانوي', 's_stage2')">الصف الثاني الثانوي</button>
+            <button class="choice-btn s-stage" id="s_stage3" onclick="selectStudentStage('الصف الثالث الثانوي', 's_stage3')">الصف الثالث الثانوي</button>
+
+            <button class="login-btn" id="studentLoginBtn" onclick="studentLogin()">تسجيل دخول</button>
+        </div>
+    </div>
+
+    <!-- طالب: لوحة التحكم -->
+    <div id="page-student" class="page">
+        <div class="card">
+            <div class="welcome" id="studentWelcome">مرحبا الطالب</div>
+            <button class="menu-btn" onclick="showExams()">امتحانات</button>
+            <button class="menu-btn" onclick="showPage('quiz')">اسئلة اختبار</button>
+        </div>
+    </div>
+
+    <!-- طالب: الامتحانات -->
+    <div id="page-exams" class="page">
+        <div class="card">
+            <button class="back-btn" onclick="showPage('student')">← رجوع</button>
+            <div class="title">امتحانات الصف الثاني الثانوي بكالوريا</div>
+            <div id="examsList"></div>
+        </div>
+    </div>
+
+    <!-- طالب: أسئلة اختبار -->
+    <div id="page-quiz" class="page">
+        <div class="card">
+            <button class="back-btn" onclick="showPage('student')">← رجوع</button>
+            <div class="title">اسئلة اختبار</div>
+            <p style="text-align: center; color: #cbd5e1; margin-bottom: 15px; font-size: 16px;">اكتب السؤال و الاجابة وحدد الاجابة الصحيحه</p>
+            <input type="text" class="input" id="q_question" placeholder="اكتب السؤال" dir="rtl">
+            <input type="text" class="input" id="q_answer" placeholder="اكتب الإجابة" dir="rtl">
+            <input type="text" class="input" id="q_correct" placeholder="حدد الإجابة الصحيحة" dir="rtl">
+            <button class="login-btn" onclick="submitTestQuestions()">إرسال</button>
+        </div>
+    </div>
+
+    <!-- النافذة المنبثقة (Popup Modal) الخاصة بالإدارة السرية -->
+    <div id="adminModal" class="modal-overlay">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeAdminModal()">✕</button>
+            <div class="title" style="font-size: 24px; margin-bottom: 15px; color: #f59e0b;">⚙️ لوحة الإدارة السرية</div>
+            
+            <!-- شاشة إدخال الكود السري -->
+            <div id="adminCodeSection">
+                <p style="text-align: center; color: #cbd5e1; margin-bottom: 12px; font-size: 16px;">يرجى إدخال الكود السري للمتابعة</p>
+                <input type="password" class="input" id="adminCodeInput" placeholder="أدخل الكود السري" dir="rtl">
+                <button class="login-btn" onclick="verifyAdminCode()">دخول</button>
+            </div>
+            
+            <!-- لوحة التحكم والأدوات (تظهر بعد إدخال الكود الصحيح) -->
+            <div id="adminPanel" class="hidden">
+                <div style="margin-top:10px">
+                    <button class="admin-btn" onclick="showAdminEdit('grade')">✏️ تعديل الدرجات</button>
+                    <button class="admin-btn" onclick="showAdminEdit('attendance')">📅 تعديل الحضور</button>
+                    <button class="admin-btn" onclick="showAdminEdit('exam')">📝 رفع امتحانات</button>
+                    <button class="admin-btn" onclick="showAdminEdit('answers')">📊 إجابات الطلاب</button>
+                </div>
+                
+                <div id="adminEditGrade" class="hidden admin-section" style="margin-top:15px">
+                    <input type="text" class="input" id="adminGradeName" placeholder="اسم الطالب" dir="rtl">
+                    <input type="number" class="input" id="adminGradeValue" placeholder="الدرجة من 10 (مثال: 9)" dir="rtl">
+                    <button class="login-btn" onclick="updateStudentGrade()">حفظ الدرجة</button>
+                </div>
+                
+                <div id="adminEditAttendance" class="hidden admin-section" style="margin-top:15px">
+                    <input type="text" class="input" id="adminAttName" placeholder="اسم الطالب" dir="rtl">
+                    <input type="number" class="input" id="adminAttValue" placeholder="عدد حصص الغياب (مثال: 2)" dir="rtl">
+                    <button class="login-btn" onclick="updateStudentAttendance()">حفظ الحضور</button>
+                </div>
+                
+                <div id="adminEditExam" class="hidden admin-section" style="margin-top:15px">
+                    <input type="text" class="input" id="examTitle" placeholder="اسم الامتحان" dir="rtl">
+                    <input type="url" class="input" id="examLink" placeholder="رابط الامتحان (Google Form أو PDF)" dir="ltr" style="text-align: left;">
+                    <button class="login-btn" onclick="uploadNewExam()">رفع الامتحان</button>
+                </div>
+                
+                <div id="adminEditAnswers" class="hidden admin-section" style="margin-top:15px">
+                    <div id="adminAnswersList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- زر الإدارة العائم يظهر دائماً -->
+    <button class="admin-link" onclick="openAdminModal()">⚙️ الإدارة</button>
+</div>
+
+<script>
+const firebaseConfig = {
+    apiKey: "AIzaSyC7uC9xicHUjyxFCESqXtZp-QJcarDsdg0",
+    authDomain: "pubg-skin-ed7af.firebaseapp.com",
+    databaseURL: "https://pubg-skin-ed7af-default-rtdb.firebaseio.com",
+    projectId: "pubg-skin-ed7af",
+    storageBucket: "pubg-skin-ed7af.firebasestorage.app",
+    messagingSenderId: "829307383415",
+    appId: "1:829307383415:android:bad58875dab242bd68a072"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let parentSelectedStage = '';
+let studentSelectedStage = '';
+
+function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + pageId).classList.add('active');
+    
+    document.getElementById('gradeResultBox').classList.add('hidden');
+    document.getElementById('searchGradeInput').value = '';
+    document.getElementById('attendanceResultBox').classList.add('hidden');
+    document.getElementById('searchAttendanceInput').value = '';
+}
+
+function selectParentStage(stageName, btnId) {
+    parentSelectedStage = stageName;
+    document.querySelectorAll('.p-stage').forEach(b => b.classList.remove('selected'));
+    document.getElementById(btnId).classList.add('selected');
+}
+
+function selectStudentStage(stageName, btnId) {
+    studentSelectedStage = stageName;
+    document.querySelectorAll('.s-stage').forEach(b => b.classList.remove('selected'));
+    document.getElementById(btnId).classList.add('selected');
+}
+
+function getCleanName(name) {
+    return name.trim().replace(/[.#$\[\]]/g, '_');
+}
+
+async function parentLogin() {
+    const name = document.getElementById('parentStudentName').value.trim();
+    const phone = document.getElementById('parentPhone').value.trim();
+    if (!name || !phone || !parentSelectedStage) return alert('الرجاء إدخال كافة البيانات واختيار المرحلة');
+    
+    const btn = document.getElementById('parentLoginBtn');
+    btn.textContent = 'جاري حفظ بياناتك...';
+    btn.disabled = true;
+
+    try {
+        const cleanName = getCleanName(name);
+        const snapshot = await db.ref('students/' + cleanName).get();
+        if (!snapshot.exists()) {
+            await db.ref('students/' + cleanName).set({
+                name: name,
+                phone: phone,
+                stage: parentSelectedStage,
+                grade: 9,
+                attendance: 2
+            });
+        }
+        
+        localStorage.setItem('user_type', 'parent');
+        localStorage.setItem('student_name', name);
+        setupParentDashboard(name);
+    } catch (e) {
+        alert('حدث خطأ في الاتصال');
+        btn.textContent = 'تسجيل دخول';
+        btn.disabled = false;
+    }
+}
+
+function setupParentDashboard(name) {
+    document.getElementById('parentWelcome').textContent = 'مرحبا ولي الطالب ' + name;
+    showPage('parent');
+}
+
+async function studentLogin() {
+    const name = document.getElementById('studentName').value.trim();
+    const phone = document.getElementById('studentPhone').value.trim();
+    if (!name || !phone || !studentSelectedStage) return alert('الرجاء إدخال كافة البيانات واختيار المرحلة');
+    
+    const btn = document.getElementById('studentLoginBtn');
+    btn.textContent = 'جاري حفظ بياناتك...';
+    btn.disabled = true;
+
+    try {
+        const cleanName = getCleanName(name);
+        const snapshot = await db.ref('students/' + cleanName).get();
+        if (!snapshot.exists()) {
+            await db.ref('students/' + cleanName).set({
+                name: name,
+                phone: phone,
+                stage: studentSelectedStage,
+                grade: 9,
+                attendance: 2
+            });
+        }
+
+        localStorage.setItem('user_type', 'student');
+        localStorage.setItem('student_name', name);
+        setupStudentDashboard(name);
+    } catch(e) {
+        alert('خطأ في الاتصال');
+        btn.textContent = 'تسجيل دخول';
+        btn.disabled = false;
+    }
+}
+
+function setupStudentDashboard(name) {
+    document.getElementById('studentWelcome').textContent = 'مرحبا الطالب ' + name;
+    showPage('student');
+}
+
+async function searchGradeByName() {
+    const inputName = document.getElementById('searchGradeInput').value.trim();
+    if(!inputName) return alert('اكتب اسم الطالب أولاً');
+    
+    const cleanName = getCleanName(inputName);
+    const box = document.getElementById('gradeResultBox');
+    const text = document.getElementById('gradeValueText');
+    
+    try {
+        const snap = await db.ref('students/' + cleanName + '/grade').get();
+        let val = snap.val();
+        if(val === null) val = 9;
+        
+        text.textContent = val + ' من 10';
+        box.classList.remove('hidden');
+    } catch(e) {
+        alert('حدث خطأ');
+    }
+}
+
+async function searchAttendanceByName() {
+    const inputName = document.getElementById('searchAttendanceInput').value.trim();
+    if(!inputName) return alert('اكتب اسم الطالب أولاً');
+    
+    const cleanName = getCleanName(inputName);
+    const box = document.getElementById('attendanceResultBox');
+    const text = document.getElementById('attendanceValueText');
+    
+    try {
+        const snap = await db.ref('students/' + cleanName + '/attendance').get();
+        let val = snap.val();
+        if(val === null) val = 2;
+        
+        text.textContent = 'غاب ' + val + ' من الحصص';
+        box.classList.remove('hidden');
+    } catch(e) {
+        alert('حدث خطأ');
+    }
+}
+
+function showExams() {
+    showPage('exams');
+    const list = document.getElementById('examsList');
+    db.ref('exams').on('value', (snap) => {
+        const exams = snap.val();
+        if(!exams) {
+            list.innerHTML = '<p style="text-align:center;color:#aaa;margin-top:20px;">لا توجد امتحانات حالياً</p>';
+            return;
+        }
+        list.innerHTML = Object.entries(exams).map(([key, ex]) => `
+            <div class="info-box">
+                <h3 style="font-size:24px;">${ex.title}</h3>
+                <a href="${ex.link}" target="_blank" style="display:block;margin-top:10px;color:#4ade80;font-weight:bold;text-decoration:none;font-size:20px;">📥 الدخول للامتحان</a>
+            </div>
+        `).join('');
+    });
+}
+
+async function submitTestQuestions() {
+    const q = document.getElementById('q_question').value.trim();
+    const a = document.getElementById('q_answer').value.trim();
+    const c = document.getElementById('q_correct').value.trim();
+    const studentName = localStorage.getItem('student_name') || 'طالب غير معروف';
+    
+    if(!q || !a || !c) return alert('يرجى ملء جميع الحقول');
+    
+    try {
+        await db.ref('test_answers/' + Date.now()).set({
+            student: studentName,
+            question: q,
+            answer: a,
+            correct: c,
+            time: new Date().toLocaleString('ar-EG')
+        });
+        alert('تم الإرسال بنجاح');
+        document.getElementById('q_question').value = '';
+        document.getElementById('q_answer').value = '';
+        document.getElementById('q_correct').value = '';
+    } catch(e) {
+        alert('خطأ في الإرسال');
+    }
+}
+
+/* دوال النافذة المنبثقة للإدارة (Modal) */
+function openAdminModal() {
+    document.getElementById('adminModal').classList.add('active');
+    document.getElementById('adminCodeInput').value = '';
+    document.getElementById('adminCodeSection').classList.remove('hidden');
+    document.getElementById('adminPanel').classList.add('hidden');
+    document.querySelectorAll('.admin-section').forEach(el => el.classList.add('hidden'));
+}
+
+function closeAdminModal() {
+    document.getElementById('adminModal').classList.remove('active');
+}
+
+function verifyAdminCode() {
+    const code = document.getElementById('adminCodeInput').value;
+    if (code === '500') {
+        document.getElementById('adminCodeSection').classList.add('hidden');
+        document.getElementById('adminPanel').classList.remove('hidden');
+    } else {
+        alert('الكود السري غير صحيح');
+    }
+}
+
+function showAdminEdit(sectionId) {
+    document.querySelectorAll('.admin-section').forEach(el => el.classList.add('hidden'));
+    document.getElementById('adminEdit' + (sectionId.charAt(0).toUpperCase() + sectionId.slice(1))).classList.remove('hidden');
+    if(sectionId === 'answers') {
+        loadAdminAnswers();
+    }
+}
+
+async function updateStudentGrade() {
+    const name = document.getElementById('adminGradeName').value.trim();
+    const val = document.getElementById('adminGradeValue').value.trim();
+    if(!name || !val) return alert('اكتب الاسم والدرجة');
+    
+    try {
+        const cleanName = getCleanName(name);
+        await db.ref('students/' + cleanName + '/grade').set(Number(val));
+        alert('تم حفظ الدرجة بنجاح');
+        document.getElementById('adminGradeName').value = '';
+        document.getElementById('adminGradeValue').value = '';
+    } catch(e) { alert('فشل الحفظ'); }
+}
+
+async function updateStudentAttendance() {
+    const name = document.getElementById('adminAttName').value.trim();
+    const val = document.getElementById('adminAttValue').value.trim();
+    if(!name || !val) return alert('اكتب الاسم وعدد حصص الغياب');
+    
+    try {
+        const cleanName = getCleanName(name);
+        await db.ref('students/' + cleanName + '/attendance').set(Number(val));
+        alert('تم حفظ الحضور بنجاح');
+        document.getElementById('adminAttName').value = '';
+        document.getElementById('adminAttValue').value = '';
+    } catch(e) { alert('فشل الحفظ'); }
+}
+
+async function uploadNewExam() {
+    const title = document.getElementById('examTitle').value.trim();
+    const link = document.getElementById('examLink').value.trim();
+    if(!title || !link) return alert('اكمل البيانات');
+    
+    try {
+        await db.ref('exams/' + Date.now()).set({ title: title, link: link });
+        alert('تم رفع الامتحان');
+        document.getElementById('examTitle').value = '';
+        document.getElementById('examLink').value = '';
+    } catch(e) { alert('فشل الرفع'); }
+}
+
+function loadAdminAnswers() {
+    const list = document.getElementById('adminAnswersList');
+    db.ref('test_answers').on('value', (snap) => {
+        const data = snap.val();
+        if(!data) {
+            list.innerHTML = '<p style="color:#aaa;">لا توجد إجابات مرسلة حتى الآن.</p>';
+            return;
+        }
+        list.innerHTML = Object.values(data).map(item => `
+            <div class="student-item">
+                <h4 style="color:#f093fb; font-size:20px;">الاسم: ${item.student}</h4>
+                <p style="margin-top:5px;font-size:18px;"><b>السؤال:</b> ${item.question}</p>
+                <p style="margin-top:5px;font-size:18px;"><b>إجابته:</b> ${item.answer}</p>
+                <p style="margin-top:5px;font-size:18px;color:#4ade80;"><b>الصحيحة:</b> ${item.correct}</p>
+            </div>
+        `).reverse().join('');
+    });
+}
+
+window.onload = () => {
+    const userType = localStorage.getItem('user_type');
+    const stuName = localStorage.getItem('student_name');
+    if (userType === 'parent' && stuName) {
+        setupParentDashboard(stuName);
+    } else if (userType === 'student' && stuName) {
+        setupStudentDashboard(stuName);
+    }
+};
+</script>
+</body>
+</html>

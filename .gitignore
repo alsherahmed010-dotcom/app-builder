@@ -1,0 +1,10 @@
+node_modules/
+config/service-account.json
+*.log
+.env
+config/service-account.json
+.env
+update_fcm.js
+config/service-account.json
+firebase-key.json
+*.json
