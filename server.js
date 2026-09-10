@@ -157,17 +157,44 @@ app.post('/api/build/:id', (req, res) => {
     }
     
     // CSS كامل الشاشة
-    htmlContent = htmlContent.replace('</head>', `<style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { 
-            width: 100%; 
-            height: 100%; 
-            margin: 0; 
-            padding: 0; 
-            overflow: hidden;
-            background: transparent;
+    // إضافة CSS edge-to-edge
+    const edgeCSS = `<style>
+        * { margin: 0 !important; padding: 0 !important; box-sizing: border-box; }
+        html { 
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: inherit;
         }
-    </style></head>`);
+        body { 
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden;
+            background: inherit;
+        }
+        /* جعل الخلفية تمتد تحت الشريط */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: inherit;
+            z-index: -1;
+        }
+        /* المحتوى الأساسي تحت الشريط */
+        .main-content, #app {
+            padding-top: env(safe-area-inset-top, 24px);
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }
+    </style>`;
+    
+    if (htmlContent.includes('</head>')) {
+        htmlContent = htmlContent.replace('</head>', edgeCSS + '</head>');
+    } else {
+        htmlContent = edgeCSS + htmlContent;
+    }
     
     // التحديث اللحظي
     htmlContent += `<script>
@@ -313,8 +340,10 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 1. تفعيل Fullscreen edge-to-edge زي فيسبوك
+        // 1. تفعيل Fullscreen edge-to-edge
         requestWindowFeature(Window.FEATURE_NO_TITLE);
+        
+        // إخفاء شريط الحالة تماماً (زي الألعاب والفيديو)
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
@@ -327,7 +356,7 @@ public class MainActivity extends Activity {
             window.setStatusBarColor(Color.TRANSPARENT);
             window.setNavigationBarColor(Color.TRANSPARENT);
             
-            // Edge-to-edge - خلي المحتوى يمتد تحت الشرائط
+            // edge-to-edge
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 window.setDecorFitsSystemWindows(false);
             } else {
@@ -342,9 +371,11 @@ public class MainActivity extends Activity {
             }
         }
         
-        // 2. إنشاء WebView
+        // 2. إنشاء WebView - خلفية شفافة عشان تبان خلفية الـ HTML
         webView = new WebView(this);
         webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.setInitialScale(0);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
