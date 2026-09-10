@@ -374,6 +374,7 @@ public class MainActivity extends Activity {
         // 2. إنشاء WebView - خلفية شفافة عشان تبان خلفية الـ HTML
         webView = new WebView(this);
         webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.setFitsSystemWindows(false);
         webView.setInitialScale(0);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         
