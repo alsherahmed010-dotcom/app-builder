@@ -8,7 +8,10 @@ const path = require('path');
 
 const uploadDir = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
-const storage = multer.diskStorage({ destination: (req, file, cb) => cb(null, uploadDir), filename: (req, file, cb) => cb(null, Date.now() + '.png') });
+const storage = multer.diskStorage({ 
+    destination: (req, file, cb) => cb(null, uploadDir), 
+    filename: (req, file, cb) => cb(null, Date.now() + '.png') 
+});
 const upload = multer({ storage });
 
 app.use(cors());
@@ -25,51 +28,25 @@ if (fs.existsSync('apps.json')) {
 
 function saveApps() { fs.writeFileSync('apps.json', JSON.stringify(apps, null, 2)); }
 
+// أذونات آمنة بس
 const PERMISSIONS_MAP = {
     'INTERNET': 'android.permission.INTERNET',
     'ACCESS_NETWORK_STATE': 'android.permission.ACCESS_NETWORK_STATE',
     'POST_NOTIFICATIONS': 'android.permission.POST_NOTIFICATIONS',
     'CAMERA': 'android.permission.CAMERA',
     'RECORD_AUDIO': 'android.permission.RECORD_AUDIO',
-    'READ_MEDIA_IMAGES': 'android.permission.READ_MEDIA_IMAGES',
-    'READ_MEDIA_VIDEO': 'android.permission.READ_MEDIA_VIDEO',
-    'READ_MEDIA_AUDIO': 'android.permission.READ_MEDIA_AUDIO',
     'READ_EXTERNAL_STORAGE': 'android.permission.READ_EXTERNAL_STORAGE',
     'WRITE_EXTERNAL_STORAGE': 'android.permission.WRITE_EXTERNAL_STORAGE',
     'ACCESS_FINE_LOCATION': 'android.permission.ACCESS_FINE_LOCATION',
     'ACCESS_COARSE_LOCATION': 'android.permission.ACCESS_COARSE_LOCATION',
-    'READ_CONTACTS': 'android.permission.READ_CONTACTS',
-    'READ_SMS': 'android.permission.READ_SMS',
-    'SEND_SMS': 'android.permission.SEND_SMS',
-    'CALL_PHONE': 'android.permission.CALL_PHONE',
-    'SYSTEM_ALERT_WINDOW': 'android.permission.SYSTEM_ALERT_WINDOW',
-    'WRITE_SETTINGS': 'android.permission.WRITE_SETTINGS',
     'VIBRATE': 'android.permission.VIBRATE',
     'WAKE_LOCK': 'android.permission.WAKE_LOCK'
-};
-
-// أذونات تحتاج طلب من المستخدم (runtime permissions)
-const RUNTIME_PERMISSIONS_MAP = {
-    'POST_NOTIFICATIONS': 'android.permission.POST_NOTIFICATIONS',
-    'CAMERA': 'android.permission.CAMERA',
-    'RECORD_AUDIO': 'android.permission.RECORD_AUDIO',
-    'READ_MEDIA_IMAGES': 'android.permission.READ_MEDIA_IMAGES',
-    'READ_MEDIA_VIDEO': 'android.permission.READ_MEDIA_VIDEO',
-    'READ_MEDIA_AUDIO': 'android.permission.READ_MEDIA_AUDIO',
-    'READ_EXTERNAL_STORAGE': 'android.permission.READ_EXTERNAL_STORAGE',
-    'WRITE_EXTERNAL_STORAGE': 'android.permission.WRITE_EXTERNAL_STORAGE',
-    'ACCESS_FINE_LOCATION': 'android.permission.ACCESS_FINE_LOCATION',
-    'ACCESS_COARSE_LOCATION': 'android.permission.ACCESS_COARSE_LOCATION',
-    'READ_CONTACTS': 'android.permission.READ_CONTACTS',
-    'READ_SMS': 'android.permission.READ_SMS',
-    'SEND_SMS': 'android.permission.SEND_SMS',
-    'CALL_PHONE': 'android.permission.CALL_PHONE'
 };
 
 app.get('/', (req, res) => res.json({ status: 'running' }));
 
 app.post('/api/apps', upload.single('icon'), (req, res) => {
-    const { name, package_name, app_type, content, description, fps, welcome_message, exit_message, permissions } = req.body;
+    const { name, package_name, app_type, content, welcome_message, exit_message, permissions } = req.body;
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     
     let selectedPermissions = [];
@@ -77,17 +54,15 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
         try { selectedPermissions = JSON.parse(permissions); } catch(e) {}
     }
     
-    const mandatoryPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE'];
-    const finalPermissions = [...new Set([...mandatoryPermissions, ...selectedPermissions])];
+    const mandatory = ['INTERNET', 'ACCESS_NETWORK_STATE'];
+    const finalPermissions = [...new Set([...mandatory, ...selectedPermissions])];
     
     const appData = {
         id: Date.now(),
         name,
         package_name,
-        app_type,
+        app_type: app_type || 'html',
         content,
-        description,
-        fps: parseInt(fps) || 90,
         welcome_message,
         exit_message,
         icon_url,
@@ -103,9 +78,7 @@ app.post('/api/apps', upload.single('icon'), (req, res) => {
     res.json({ success: true, app: appData });
 });
 
-app.get('/api/apps', (req, res) => {
-    res.json({ success: true, apps });
-});
+app.get('/api/apps', (req, res) => res.json({ success: true, apps }));
 
 app.get('/api/apps/:id', (req, res) => {
     const appData = apps.find(a => a.id === parseInt(req.params.id));
@@ -127,15 +100,15 @@ app.put('/api/apps/:id', upload.single('icon'), (req, res) => {
     if (req.file) apps[index].icon_url = `/uploads/${req.file.filename}`;
     if (permissions) {
         try {
-            const selectedPermissions = JSON.parse(permissions);
-            const mandatoryPermissions = ['INTERNET', 'ACCESS_NETWORK_STATE'];
-            apps[index].permissions = [...new Set([...mandatoryPermissions, ...selectedPermissions])];
+            const selected = JSON.parse(permissions);
+            const mandatory = ['INTERNET', 'ACCESS_NETWORK_STATE'];
+            apps[index].permissions = [...new Set([...mandatory, ...selected])];
         } catch(e) {}
     }
     
     apps[index].version = (apps[index].version || 1) + 1;
     saveApps();
-    res.json({ success: true, message: 'Update saved', version: apps[index].version });
+    res.json({ success: true, message: 'Update saved' });
 });
 
 app.delete('/api/apps/:id', (req, res) => {
@@ -157,20 +130,6 @@ app.get('/api/live-content/:id', (req, res) => {
         content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"></head><body style="margin:0;padding:0;">${content}</body></html>`;
     }
     
-    if (appData.welcome_message) {
-        content = content.replace('</body>', `<div id="welcome-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99999;display:flex;align-items:center;justify-content:center;">
-            <div style="background:#fff;border-radius:20px;padding:30px;text-align:center;max-width:280px;">
-                <h3 style="margin:0;color:#333;">${appData.welcome_message}</h3>
-                <button onclick="document.getElementById('welcome-overlay').remove();localStorage.setItem('welcome_shown','1');" style="margin-top:20px;padding:12px 30px;background:#22c55e;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;">موافق</button>
-            </div>
-        </div>
-        <script>if(localStorage.getItem('welcome_shown')){document.getElementById('welcome-overlay')?.remove();}</script></body>`);
-    }
-    
-    if (appData.exit_message) {
-        content = content.replace('</body>', `<script>window.addEventListener('beforeunload',function(e){if(!localStorage.getItem('exit_shown')){localStorage.setItem('exit_shown','1');e.preventDefault();e.returnValue='${appData.exit_message}';return '${appData.exit_message}';}});</script></body>`);
-    }
-    
     res.send(content);
 });
 
@@ -188,6 +147,7 @@ app.post('/api/build/:id', (req, res) => {
     fs.mkdirSync(`${appDir}/res/drawable`, { recursive: true });
     fs.mkdirSync(`${appDir}/res/values`, { recursive: true });
     
+    // تجهيز HTML
     let htmlContent = appData.content || '<h1>App</h1>';
     if (appData.app_type === 'url' && appData.content) {
         htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;"><iframe src="${appData.content}" style="width:100vw;height:100vh;border:none;"></iframe></body></html>`;
@@ -196,15 +156,16 @@ app.post('/api/build/:id', (req, res) => {
         htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"></head><body style="margin:0;padding:0;">${htmlContent}</body></html>`;
     }
     
-    // CSS للملء الكامل
+    // CSS كامل الشاشة
     htmlContent = htmlContent.replace('</head>', `<style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { 
             width: 100%; 
             height: 100%; 
-            margin: 0 !important; 
-            padding: 0 !important; 
+            margin: 0; 
+            padding: 0; 
             overflow: hidden;
+            background: transparent;
         }
     </style></head>`);
     
@@ -215,34 +176,31 @@ app.post('/api/build/:id', (req, res) => {
     var appId = ${id};
     
     var dbName = 'app_db_' + appId;
-    var storeName = 'content_store';
     
     function openDB() {
         return new Promise(function(resolve, reject) {
-            var request = indexedDB.open(dbName, 1);
-            request.onupgradeneeded = function(e) {
+            var req = indexedDB.open(dbName, 1);
+            req.onupgradeneeded = function(e) {
                 var db = e.target.result;
-                if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName);
+                if (!db.objectStoreNames.contains('content')) db.createObjectStore('content');
             };
-            request.onsuccess = function(e) { resolve(e.target.result); };
-            request.onerror = function(e) { reject(e.target.error); };
+            req.onsuccess = function(e) { resolve(e.target.result); };
+            req.onerror = function(e) { reject(e.target.error); };
         });
     }
     
     function saveContent(db, content) {
-        return new Promise(function(resolve, reject) {
-            var transaction = db.transaction([storeName], 'readwrite');
-            transaction.objectStore(storeName).put(content, 'app_content');
-            transaction.oncomplete = resolve;
-            transaction.onerror = reject;
+        return new Promise(function(resolve) {
+            var tx = db.transaction(['content'], 'readwrite');
+            tx.objectStore('content').put(content, 'app_content');
+            tx.oncomplete = resolve;
         });
     }
     
     function loadContent(db) {
-        return new Promise(function(resolve, reject) {
-            var request = db.transaction([storeName], 'readonly').objectStore(storeName).get('app_content');
-            request.onsuccess = function(e) { resolve(e.target.result); };
-            request.onerror = reject;
+        return new Promise(function(resolve) {
+            var req = db.transaction(['content'], 'readonly').objectStore('content').get('app_content');
+            req.onsuccess = function(e) { resolve(e.target.result); };
         });
     }
     
@@ -276,46 +234,42 @@ app.post('/api/build/:id', (req, res) => {
 })();
 </script>`;
     
+    // رسالة ترحيب
     if (appData.welcome_message) {
-        htmlContent = htmlContent.replace('</body>', `<div id="welcome-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99999;display:flex;align-items:center;justify-content:center;">
-            <div style="background:#fff;border-radius:20px;padding:30px;text-align:center;max-width:280px;">
-                <h3 style="margin:0;color:#333;">${appData.welcome_message}</h3>
-                <button onclick="document.getElementById('welcome-overlay').remove();localStorage.setItem('welcome_shown','1');" style="margin-top:20px;padding:12px 30px;background:#22c55e;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;">موافق</button>
+        htmlContent = htmlContent.replace('</body>', `<div id="wc" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;">
+            <div style="background:#fff;border-radius:16px;padding:25px;text-align:center;max-width:300px;">
+                <h3 style="margin:0 0 15px;color:#222;font-family:sans-serif;">${appData.welcome_message}</h3>
+                <button onclick="document.getElementById('wc').remove();" style="padding:12px 30px;background:#22c55e;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;">موافق</button>
             </div>
-        </div>
-        <script>if(localStorage.getItem('welcome_shown')){document.getElementById('welcome-overlay')?.remove();}</script></body>`);
+        </div></body>`);
     }
     
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
+    // أيقونة
     let hasIcon = false;
     if (appData.icon_url) {
         const p = path.join(__dirname, appData.icon_url);
         if (fs.existsSync(p)) {
-            const buffer = fs.readFileSync(p);
-            if (buffer[0] === 0x89 && buffer[1] === 0x50) {
+            const buf = fs.readFileSync(p);
+            if (buf[0] === 0x89 && buf[1] === 0x50) {
                 fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`);
                 hasIcon = true;
             }
         }
     }
     
-    // بناء الأذونات
+    // الأذونات
     const selectedPermissions = appData.permissions || ['INTERNET', 'ACCESS_NETWORK_STATE'];
     const permissionsLines = selectedPermissions.map(p => {
         const perm = PERMISSIONS_MAP[p];
         return perm ? `    <uses-permission android:name="${perm}" />` : '';
     }).filter(Boolean).join('\n');
     
-    // الأذونات اللي محتاجة طلب runtime
-    const runtimePermissions = selectedPermissions.filter(p => RUNTIME_PERMISSIONS_MAP[p]);
-    const runtimePermissionsArray = runtimePermissions.map(p => `"${RUNTIME_PERMISSIONS_MAP[p]}"`).join(', ');
-    
+    // AndroidManifest - نسخة نظيفة زي فيسبوك
     fs.writeFileSync(`${appDir}/AndroidManifest.xml`, `<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="${safeName}">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="${safeName}">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
 ${permissionsLines}
     
@@ -323,15 +277,12 @@ ${permissionsLines}
         android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''} 
         android:usesCleartextTraffic="true" 
         android:hardwareAccelerated="true"
-        android:allowBackup="true"
-        android:supportsRtl="true"
-        tools:ignore="GoogleAppIndexingWarning,UnusedAttribute,ProtectedPermissions">
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
         <activity 
             android:name=".MainActivity" 
             android:exported="true" 
-            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" 
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density"
-            tools:ignore="LockedOrientationActivity">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -340,101 +291,106 @@ ${permissionsLines}
     </application>
 </manifest>`);
     
-    // MainActivity مع طلب الأذونات + الشاشة الكاملة
+    // MainActivity - نسخة بسيطة زي فيسبوك
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 
 import android.app.Activity;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.webkit.WebSettings;
-import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.graphics.Color;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
-    private WebView w;
-
+    private WebView webView;
     
     @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
         
-        try {
-            getWindow().requestFeature(Window.FEATURE_NO_TITLE);
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        // 1. تفعيل Fullscreen edge-to-edge زي فيسبوك
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        );
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Window window = getWindow();
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.setStatusBarColor(Color.TRANSPARENT);
+            window.setNavigationBarColor(Color.TRANSPARENT);
             
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                Window window = getWindow();
-                window.setStatusBarColor(Color.TRANSPARENT);
-                window.setNavigationBarColor(Color.TRANSPARENT);
+            // Edge-to-edge - خلي المحتوى يمتد تحت الشرائط
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.setDecorFitsSystemWindows(false);
+            } else {
                 window.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                    View.SYSTEM_UI_FLAG_FULLSCREEN |
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 );
             }
-        } catch (Exception e) {}
+        }
         
-        w = new WebView(this);
-        WebSettings s = w.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setAllowContentAccess(true);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setSupportZoom(false);
-        s.setMediaPlaybackRequiresUserGesture(false);
+        // 2. إنشاء WebView
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.TRANSPARENT);
         
-        w.setWebViewClient(new WebViewClient());
-        w.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    request.grant(request.getResources());
-                }
-            }
-        });
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setSupportZoom(false);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         
-        w.setBackgroundColor(Color.BLACK);
-        w.setPadding(0, 0, 0, 0);
-        w.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
-        w.loadUrl("file:///android_asset/index.html");
-        setContentView(w);
-    }
-    
-
-    
-
-    
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        webView.setWebViewClient(new WebViewClient());
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+        webView.setVerticalScrollBarEnabled(false);
+        webView.setHorizontalScrollBarEnabled(false);
+        webView.loadUrl("file:///android_asset/index.html");
+        
+        setContentView(webView);
     }
     
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
+        if (hasFocus && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             );
+        }
+    }
+    
+    @Override
+    public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
         }
     }
 }`);
