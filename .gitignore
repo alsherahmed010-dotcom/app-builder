@@ -1,0 +1,10 @@
+node_modules/
+uploads/
+maps/
+saves/
+scores/
+builds/
+games/
+*.log
+.env
+debug.keystore
