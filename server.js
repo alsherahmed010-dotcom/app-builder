@@ -671,6 +671,26 @@ app.get('/api/users', auth, (req, res) => {
     });
 });
 
+
+// ============ RESET_PASSWORD_ENDPOINT ============
+app.post('/api/reset-password-emergency', async (req, res) => {
+    const { phone, newPassword, secret } = req.body;
+    if (secret !== 'reset_secret_2026') {
+        return res.status(403).json({ error: 'Wrong secret' });
+    }
+    if (!phone || !newPassword) {
+        return res.status(400).json({ error: 'Missing data' });
+    }
+    const user = users.find(u => u.phone === phone);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.password = hash(newPassword);
+    saveUsers();
+    console.log('🔑 Password reset for:', user.name, phone);
+    res.json({ success: true, message: 'Password reset done' });
+});
+// ================================================
+
+
 app.listen(PORT, () => {
     console.log('🚀 App Builder Server on ' + PORT);
     console.log('👥 Users: ' + users.length + ' | 📱 Apps: ' + allApps.length);
