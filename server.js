@@ -3,13 +3,15 @@ const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const { exec } = require('child_process');
 
+const app = express();
+const PORT = process.env.PORT || 8080;
 
 // ============================================
-// 🔥 FIREBASE CONFIGURATION
+// 🔥 FIREBASE CONFIG
 // ============================================
-const https = require('https');
 const FIREBASE_URL = 'https://otp-5acda-default-rtdb.firebaseio.com';
 
 function fbRequest(method, p, data = null) {
@@ -43,21 +45,10 @@ const fb = {
     delete: (p) => fbRequest('DELETE', p)
 };
 
-// ================================================
-
-
-const app = express();
-const PORT = process.env.PORT || 8080;
-
 // ============================================
 // 🔑 ADMIN CONFIG
 // ============================================
-const ADMIN_PHONES = [
-    '01555085382', // ← 01555085382
-];
-const ADMIN_DEVICES = [
-    'dev_1789534594369_gj81mos73ll'
-];
+const ADMIN_PHONES = ['01555085382'];
 
 // ============================================
 // 📁 FOLDERS
@@ -73,213 +64,99 @@ const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadsDir),
     filename: (req, file, cb) => cb(null, Date.now() + '_' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'))
 });
-const upload = multer({ storage });
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 // ============================================
 // 🛠️ MIDDLEWARE
 // ============================================
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
-app.use('/builds', express.static('builds'));
+app.use('/uploads', express.static(uploadsDir));
+app.use('/builds', express.static(buildsDir));
 
 // ============================================
 // 💾 HELPERS
 // ============================================
-function saveJSON(file, data) {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
-function loadJSON(file, def = null) {
-    if (!fs.existsSync(file)) return def;
-    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return def; }
-}
 function hash(str) {
     let h = 0;
     for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        h = ((h << 5) - h) + char;
+        h = ((h << 5) - h) + str.charCodeAt(i);
         h = h & h;
     }
     return 'h_' + Math.abs(h).toString(36);
 }
+
 function genToken() {
     return 'tk_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 16);
 }
 
-// ============================================
-// 💾 DATA FILES
-// ============================================
-let users = loadJSON(path.join(__dirname, 'users.json'), []);
-let sessions = loadJSON(path.join(__dirname, 'sessions.json'), {});
-let allApps = loadJSON(path.join(__dirname, 'apps.json'), []);
+// In-memory cache
+let users = [];
+let sessions = {};
+let allApps = [];
 
-function saveUsers() { 
-    saveJSON(path.join(__dirname, 'users.json'), users);
-    // حفظ في Firebase كـ backup
-    fb.set('/app_builder_users', users).catch(e => console.error('FB save error:', e));
-}
-
-async function loadUsersFromFirebase() {
+async function loadFromFirebase() {
+    console.log('🔥 Loading from Firebase...');
     try {
-        const fbUsers = await fb.get('/app_builder_users');
-        if (fbUsers && Array.isArray(fbUsers) && fbUsers.length > 0) {
-            console.log('✅ Loaded', fbUsers.length, 'users from Firebase');
-            return fbUsers;
+        const [fbUsers, fbApps, fbSessions] = await Promise.all([
+            fb.get('/app_builder/users'),
+            fb.get('/app_builder/apps'),
+            fb.get('/app_builder/sessions')
+        ]);
+        
+        if (fbUsers) {
+            users = Object.values(fbUsers);
+            console.log('✅ Loaded', users.length, 'users from Firebase');
+        } else {
+            users = [];
+            console.log('📝 No users yet');
         }
-    } catch(e) { console.error('FB load error:', e); }
-    return null;
-}
-function saveSessions() { saveJSON(path.join(__dirname, 'sessions.json'), sessions); }
-function saveApps() { 
-    saveJSON(path.join(__dirname, 'apps.json'), allApps);
-    fb.set('/app_builder_apps', allApps).catch(e => console.error('FB save error:', e));
+        
+        if (fbApps) {
+            allApps = Object.values(fbApps);
+            console.log('✅ Loaded', allApps.length, 'apps from Firebase');
+        } else {
+            allApps = [];
+        }
+        
+        if (fbSessions) {
+            sessions = fbSessions;
+            console.log('✅ Loaded', Object.keys(sessions).length, 'sessions');
+        }
+    } catch(e) {
+        console.error('❌ Firebase load error:', e.message);
+    }
 }
 
-async function loadAppsFromFirebase() {
-    try {
-        const fbApps = await fb.get('/app_builder_apps');
-        if (fbApps && Array.isArray(fbApps) && fbApps.length > 0) {
-            console.log('✅ Loaded', fbApps.length, 'apps from Firebase');
-            return fbApps;
-        }
-    } catch(e) { console.error('FB load error:', e); }
-    return null;
+function saveUsers() {
+    const obj = {};
+    users.forEach(u => { obj[u.id] = u; });
+    fb.set('/app_builder/users', obj).catch(e => console.error('FB save users:', e.message));
+}
+
+function saveApps() {
+    const obj = {};
+    allApps.forEach(a => { obj[a.id] = a; });
+    fb.set('/app_builder/apps', obj).catch(e => console.error('FB save apps:', e.message));
+}
+
+function saveSessions() {
+    fb.set('/app_builder/sessions', sessions).catch(e => console.error('FB save sessions:', e.message));
 }
 
 // ============================================
 // 🏠 HOME
 // ============================================
-
-// ============================================
-// 🧠 SMART PASSWORD RESET WITH DEVICE VERIFICATION
-// ============================================
-
-// طلب إعادة تعيين كلمة السر
-app.post('/api/forgot-password/check', async (req, res) => {
-    const { phone, device_id } = req.body;
-    
-    if (!phone) return res.status(400).json({ error: 'رقم الهاتف مطلوب' });
-    
-    const user = users.find(u => u.phone === phone);
-    if (!user) return res.status(404).json({ error: 'الرقم غير مسجل' });
-    
-    // تحقق: هل الجهاز ده هو نفس الجهاز اللي سجل بيه؟
-    const devices = user.devices || [];
-    const isOwner = devices.includes(device_id) || user.device_id === device_id;
-    
-    if (isOwner) {
-        return res.json({ 
-            success: true, 
-            verified: true, 
-            message: '✅ تم التحقق من جهازك - يمكنك تغيير كلمة السر'
-        });
-    } else {
-        // جهاز جديد - اطلب موافقة إضافية
-        return res.json({ 
-            success: true, 
-            verified: false, 
-            message: '⚠️ رقم مسجل بالفعل. تم إرسال طلب تحقق...'
-        });
-    }
-});
-
-// تغيير كلمة السر بعد التحقق
-app.post('/api/forgot-password/reset', async (req, res) => {
-    const { phone, device_id, newPassword, verified } = req.body;
-    
-    if (!phone || !device_id || !newPassword) {
-        return res.status(400).json({ error: 'كل الحقول مطلوبة' });
-    }
-    
-    if (newPassword.length < 4) {
-        return res.status(400).json({ error: 'كلمة السر 4 أحرف على الأقل' });
-    }
-    
-    const user = users.find(u => u.phone === phone);
-    if (!user) return res.status(404).json({ error: 'الرقم غير مسجل' });
-    
-    // تحقق من الجهاز
-    const devices = user.devices || [];
-    const isOwner = devices.includes(device_id) || user.device_id === device_id;
-    
-    // لو مش نفس الجهاز، محتاج verified=true (من كود تحقق مثلاً)
-    if (!isOwner && !verified) {
-        return res.status(403).json({ error: 'غير مسموح - جهاز مختلف' });
-    }
-    
-    // غيّر كلمة السر
-    user.password = hash(newPassword);
-    user.passwordChangedAt = Date.now();
-    
-    // ضيف الجهاز ده للقائمة
-    if (!user.devices) user.devices = [];
-    if (!user.devices.includes(device_id)) {
-        user.devices.push(device_id);
-    }
-    
-    saveUsers();
-    console.log('🔑 Password reset for:', user.name, phone, '| Device:', device_id);
-    
-    res.json({ success: true, message: '✅ تم تغيير كلمة السر بنجاح' });
-});
-
-// ================================================
-
-
-
-// ============================================
-// 👤 UPDATE PROFILE
-// ============================================
-app.put('/api/profile', upload.single('avatar'), async (req, res) => {
-    const token = req.headers['x-auth-token'];
-    if (!token || !sessions[token]) return res.status(401).json({ error: 'Unauthorized' });
-    
-    const user = users.find(u => u.id === sessions[token].userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    
-    if (req.body.name && req.body.name.trim().length >= 2) {
-        user.name = req.body.name.trim();
-    }
-    
-    if (req.file) {
-        user.avatar = `/uploads/${req.file.filename}`;
-    }
-    
-    // للأدمن: تغيير لون/رمز مخصص
-    if (req.body.admin_color && user.role === 'admin') {
-        user.admin_color = req.body.admin_color;
-    }
-    
-    user.updatedAt = Date.now();
-    saveUsers();
-    console.log('👤 Profile updated:', user.name);
-    
-    res.json({ 
-        success: true, 
-        message: 'تم التحديث',
-        user: {
-            id: user.id,
-            name: user.name,
-            phone: user.phone,
-            role: user.role,
-            avatar: user.avatar,
-            about: user.about,
-            admin_color: user.admin_color
-        }
-    });
-});
-
-// ================================================
-
 app.get('/', (req, res) => {
-    res.json({
-        status: 'running',
-        service: 'App Builder Pro',
-        version: '3.0',
+    res.json({ 
+        status: 'running', 
+        service: 'App Builder Pro', 
+        version: '5.0',
         users: users.length,
-        apps: allApps.length
+        apps: allApps.length,
+        storage: 'Firebase'
     });
 });
 
@@ -288,11 +165,8 @@ app.get('/', (req, res) => {
 // ============================================
 function auth(req, res, next) {
     const token = req.headers['x-auth-token'] || req.query.token;
-    if (!token || !sessions[token]) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const session = sessions[token];
-    const user = users.find(u => u.id === session.userId);
+    if (!token || !sessions[token]) return res.status(401).json({ error: 'Unauthorized' });
+    const user = users.find(u => u.id === sessions[token].userId);
     if (!user) {
         delete sessions[token];
         saveSessions();
@@ -308,11 +182,9 @@ function isAdmin(user) {
 }
 
 // ============================================
-// 📝 AUTH ROUTES
+// 📝 REGISTER
 // ============================================
-
-// إنشاء حساب
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
     const { name, phone, password, device_id } = req.body;
     
     if (!name || !phone || !password) {
@@ -324,40 +196,42 @@ app.post('/api/register', (req, res) => {
     }
     
     if (phone.length < 11 || !/^\d+$/.test(phone)) {
-        return res.status(400).json({ error: 'رقم الهاتف غير صحيح (11 رقم)' });
+        return res.status(400).json({ error: 'رقم الهاتف غير صحيح' });
     }
     
     if (password.length < 4) {
         return res.status(400).json({ error: 'كلمة السر 4 أحرف على الأقل' });
     }
     
-    // التحقق من وجود المستخدم
     if (users.find(u => u.phone === phone)) {
         return res.status(400).json({ error: 'رقم الهاتف مسجل بالفعل' });
     }
     
-    // تحديد الدور
-    const role = ADMIN_PHONES.includes(phone) || ADMIN_DEVICES.includes(device_id) ? 'admin' : 'user';
+    const role = ADMIN_PHONES.includes(phone) ? 'admin' : 'user';
     
     const newUser = {
-        id: Date.now(),
+        id: 'u_' + Date.now(),
         name,
         phone,
         password: hash(password),
-        device_id: device_id || null,
         role: role,
-        createdAt: Date.now()
+        avatar: null,
+        about: 'متاح',
+        devices: device_id ? [device_id] : [],
+        device_id: device_id || null,
+        admin_color: role === 'admin' ? 'gold' : null,
+        createdAt: Date.now(),
+        lastSeen: Date.now()
     };
     
     users.push(newUser);
     saveUsers();
     
-    // إنشاء token
     const token = genToken();
     sessions[token] = { userId: newUser.id, createdAt: Date.now() };
     saveSessions();
     
-    console.log('✅ Registered:', name, '| Role:', role);
+    console.log('✅ Registered:', name, phone, '| Role:', role);
     
     res.json({
         success: true,
@@ -367,13 +241,17 @@ app.post('/api/register', (req, res) => {
             name: newUser.name,
             phone: newUser.phone,
             role: newUser.role,
-            device_id: newUser.device_id
+            avatar: newUser.avatar,
+            about: newUser.about,
+            admin_color: newUser.admin_color
         }
     });
 });
 
-// تسجيل الدخول
-app.post('/api/login', (req, res) => {
+// ============================================
+// 🔐 LOGIN
+// ============================================
+app.post('/api/login', async (req, res) => {
     const { phone, password, device_id } = req.body;
     
     if (!phone || !password) {
@@ -389,18 +267,18 @@ app.post('/api/login', (req, res) => {
         return res.status(400).json({ error: 'كلمة السر غير صحيحة' });
     }
     
-    // تحديث device_id و الدور
     if (device_id) {
         user.device_id = device_id;
         if (!user.devices) user.devices = [];
         if (!user.devices.includes(device_id)) {
             user.devices.push(device_id);
-            console.log('📱 New device added for', user.name);
         }
     }
-    if (ADMIN_PHONES.includes(phone) || ADMIN_DEVICES.includes(device_id)) {
+    
+    if (ADMIN_PHONES.includes(phone)) {
         user.role = 'admin';
     }
+    
     user.lastSeen = Date.now();
     saveUsers();
     
@@ -408,7 +286,7 @@ app.post('/api/login', (req, res) => {
     sessions[token] = { userId: user.id, createdAt: Date.now() };
     saveSessions();
     
-    console.log('🔐 Login:', user.name, '| Role:', user.role);
+    console.log('🔐 Login:', user.name);
     
     res.json({
         success: true,
@@ -418,12 +296,16 @@ app.post('/api/login', (req, res) => {
             name: user.name,
             phone: user.phone,
             role: user.role,
-            device_id: user.device_id
+            avatar: user.avatar,
+            about: user.about,
+            admin_color: user.admin_color
         }
     });
 });
 
-// التحقق من الجلسة
+// ============================================
+// 👤 ME
+// ============================================
 app.get('/api/me', auth, (req, res) => {
     res.json({
         success: true,
@@ -432,12 +314,16 @@ app.get('/api/me', auth, (req, res) => {
             name: req.user.name,
             phone: req.user.phone,
             role: req.user.role,
-            device_id: req.user.device_id
+            avatar: req.user.avatar,
+            about: req.user.about,
+            admin_color: req.user.admin_color
         }
     });
 });
 
-// تسجيل الخروج
+// ============================================
+// 🚪 LOGOUT
+// ============================================
 app.post('/api/logout', auth, (req, res) => {
     delete sessions[req.token];
     saveSessions();
@@ -445,20 +331,115 @@ app.post('/api/logout', auth, (req, res) => {
 });
 
 // ============================================
+// 👤 UPDATE PROFILE
+// ============================================
+app.put('/api/profile', auth, upload.single('avatar'), (req, res) => {
+    const user = req.user;
+    
+    if (req.body.name && req.body.name.trim().length >= 2) {
+        user.name = req.body.name.trim();
+    }
+    
+    if (req.file) {
+        user.avatar = `/uploads/${req.file.filename}`;
+    }
+    
+    if (req.body.admin_color && user.role === 'admin') {
+        user.admin_color = req.body.admin_color;
+    }
+    
+    user.updatedAt = Date.now();
+    saveUsers();
+    
+    res.json({
+        success: true,
+        user: {
+            id: user.id,
+            name: user.name,
+            phone: user.phone,
+            role: user.role,
+            avatar: user.avatar,
+            about: user.about,
+            admin_color: user.admin_color
+        }
+    });
+});
+
+// ============================================
+// 🔑 FORGOT PASSWORD
+// ============================================
+app.post('/api/forgot-password/check', async (req, res) => {
+    const { phone, device_id } = req.body;
+    
+    if (!phone) return res.status(400).json({ error: 'رقم مطلوب' });
+    
+    const user = users.find(u => u.phone === phone);
+    if (!user) return res.status(404).json({ error: 'الرقم غير مسجل' });
+    
+    const devices = user.devices || [];
+    const isOwner = devices.includes(device_id) || user.device_id === device_id;
+    
+    if (isOwner) {
+        return res.json({ 
+            success: true, 
+            verified: true, 
+            message: 'تم التحقق من جهازك'
+        });
+    }
+    
+    return res.json({ 
+        success: true, 
+        verified: false, 
+        message: 'جهاز مختلف - غير مسموح'
+    });
+});
+
+app.post('/api/forgot-password/reset', async (req, res) => {
+    const { phone, device_id, newPassword, verified } = req.body;
+    
+    if (!phone || !device_id || !newPassword) {
+        return res.status(400).json({ error: 'كل الحقول مطلوبة' });
+    }
+    
+    if (newPassword.length < 4) {
+        return res.status(400).json({ error: 'كلمة السر 4 أحرف' });
+    }
+    
+    const user = users.find(u => u.phone === phone);
+    if (!user) return res.status(404).json({ error: 'غير مسجل' });
+    
+    const devices = user.devices || [];
+    const isOwner = devices.includes(device_id) || user.device_id === device_id;
+    
+    if (!isOwner && !verified) {
+        return res.status(403).json({ error: 'جهاز مختلف' });
+    }
+    
+    user.password = hash(newPassword);
+    user.passwordChangedAt = Date.now();
+    
+    if (!user.devices) user.devices = [];
+    if (!user.devices.includes(device_id)) {
+        user.devices.push(device_id);
+    }
+    
+    saveUsers();
+    console.log('🔑 Password reset:', user.name);
+    
+    res.json({ success: true, message: 'تم تغيير كلمة السر' });
+});
+
+// ============================================
 // 📱 APPS
 // ============================================
-
-// جلب التطبيقات
 app.get('/api/apps', auth, (req, res) => {
     const admin = isAdmin(req.user);
-    
     let filteredApps;
+    
     if (admin) {
         filteredApps = allApps;
-        console.log('👑 ADMIN', req.user.name, '- ALL apps:', allApps.length);
     } else {
         filteredApps = allApps.filter(a => a.user_id === req.user.id);
-        console.log('👤 USER', req.user.name, '- Own apps:', filteredApps.length);
     }
     
     res.json({
@@ -469,11 +450,10 @@ app.get('/api/apps', auth, (req, res) => {
     });
 });
 
-// إنشاء تطبيق
 app.post('/api/apps', auth, upload.single('icon'), (req, res) => {
-    const { name, package_name, app_type, content, welcome_message, exit_message, permissions } = req.body;
+    const { name, package_name, app_type, content, welcome_message, permissions } = req.body;
     
-    if (!name) return res.status(400).json({ error: 'اسم التطبيق مطلوب' });
+    if (!name) return res.status(400).json({ error: 'اسم مطلوب' });
     
     const icon_url = req.file ? `/uploads/${req.file.filename}` : null;
     
@@ -486,13 +466,11 @@ app.post('/api/apps', auth, upload.single('icon'), (req, res) => {
         id: Date.now(),
         user_id: req.user.id,
         user_name: req.user.name,
-        device_id: req.user.device_id,
         name,
-        package_name,
+        package_name: package_name || 'com.app.app',
         app_type: app_type || 'html',
-        content,
-        welcome_message,
-        exit_message,
+        content: content || '',
+        welcome_message: welcome_message || '',
         icon_url,
         permissions: perms,
         status: 'pending',
@@ -508,7 +486,6 @@ app.post('/api/apps', auth, upload.single('icon'), (req, res) => {
     res.json({ success: true, app: appData });
 });
 
-// جلب تطبيق
 app.get('/api/apps/:id', auth, (req, res) => {
     const appData = allApps.find(a => a.id === parseInt(req.params.id));
     if (!appData) return res.status(404).json({ error: 'Not found' });
@@ -520,7 +497,6 @@ app.get('/api/apps/:id', auth, (req, res) => {
     }
 });
 
-// تعديل تطبيق
 app.put('/api/apps/:id', auth, upload.single('icon'), (req, res) => {
     const id = parseInt(req.params.id);
     const index = allApps.findIndex(a => a.id === id);
@@ -531,24 +507,20 @@ app.put('/api/apps/:id', auth, upload.single('icon'), (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
     }
     
-    const { name, package_name, content, welcome_message, exit_message, permissions } = req.body;
+    const { name, package_name, content, welcome_message } = req.body;
     if (name) allApps[index].name = name;
     if (package_name) allApps[index].package_name = package_name;
     if (content) allApps[index].content = content;
     if (welcome_message) allApps[index].welcome_message = welcome_message;
-    if (exit_message) allApps[index].exit_message = exit_message;
     if (req.file) allApps[index].icon_url = `/uploads/${req.file.filename}`;
-    if (permissions) {
-        try { allApps[index].permissions = JSON.parse(permissions); } catch(e) {}
-    }
     
     allApps[index].version++;
     allApps[index].updatedAt = Date.now();
     saveApps();
-    res.json({ success: true, message: 'Updated' });
+    
+    res.json({ success: true });
 });
 
-// حذف تطبيق
 app.delete('/api/apps/:id', auth, (req, res) => {
     const id = parseInt(req.params.id);
     const appData = allApps.find(a => a.id === id);
@@ -694,15 +666,21 @@ app.post('/api/build/:id', auth, (req, res) => {
     fs.writeFileSync(`${appDir}/assets/index.html`, htmlContent);
     fs.writeFileSync(`${appDir}/res/values/strings.xml`, `<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">${appData.name}</string></resources>`);
     
+    // Icon handling - no jimp, just copy if PNG
     let hasIcon = false;
     if (appData.icon_url) {
         const p = path.join(__dirname, appData.icon_url.replace(/^\//, ''));
         if (fs.existsSync(p)) {
-            const buf = fs.readFileSync(p);
-            if (buf[0] === 0x89 && buf[1] === 0x50) {
-                fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`);
-                hasIcon = true;
-            }
+            try {
+                const buf = fs.readFileSync(p);
+                if (buf[0] === 0x89 && buf[1] === 0x50) {
+                    fs.copyFileSync(p, `${appDir}/res/drawable/ic_launcher.png`);
+                    hasIcon = true;
+                } else {
+                    // غير PNG - تجاهل
+                    console.log('⚠️ Icon not PNG, skipping');
+                }
+            } catch(e) { console.error('Icon error:', e.message); }
         }
     }
     
@@ -720,9 +698,6 @@ app.post('/api/build/:id', auth, (req, res) => {
         'ACCESS_FINE_LOCATION': 'android.permission.ACCESS_FINE_LOCATION',
         'ACCESS_COARSE_LOCATION': 'android.permission.ACCESS_COARSE_LOCATION',
         'READ_CONTACTS': 'android.permission.READ_CONTACTS',
-        'READ_SMS': 'android.permission.READ_SMS',
-        'SEND_SMS': 'android.permission.SEND_SMS',
-        'CALL_PHONE': 'android.permission.CALL_PHONE',
         'VIBRATE': 'android.permission.VIBRATE',
         'WAKE_LOCK': 'android.permission.WAKE_LOCK'
     };
@@ -769,28 +744,22 @@ import android.os.Build;
 
 public class MainActivity extends Activity {
     private WebView webView;
-    
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             Window window = getWindow();
             window.setStatusBarColor(Color.TRANSPARENT);
             window.setNavigationBarColor(Color.TRANSPARENT);
             window.getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             );
         }
-        
         webView = new WebView(this);
         webView.setBackgroundColor(Color.TRANSPARENT);
         WebSettings s = webView.getSettings();
@@ -800,24 +769,19 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
     }
-    
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             );
         }
     }
@@ -852,7 +816,7 @@ app.get('/api/build-status/:id', auth, (req, res) => {
 });
 
 // ============================================
-// 👑 ADMIN - كل المستخدمين
+// 👑 USERS (Admin)
 // ============================================
 app.get('/api/users', auth, (req, res) => {
     if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin only' });
@@ -864,34 +828,27 @@ app.get('/api/users', auth, (req, res) => {
             name: u.name,
             phone: u.phone,
             role: u.role,
-            device_id: u.device_id,
+            avatar: u.avatar,
+            admin_color: u.admin_color,
             createdAt: u.createdAt,
+            lastSeen: u.lastSeen,
             apps_count: allApps.filter(a => a.user_id === u.id).length
         }))
     });
 });
 
-
-// ============ RESET_PASSWORD_ENDPOINT ============
-app.post('/api/reset-password-emergency', async (req, res) => {
-    const { phone, newPassword, secret } = req.body;
-    if (secret !== 'reset_secret_2026') {
-        return res.status(403).json({ error: 'Wrong secret' });
-    }
-    if (!phone || !newPassword) {
-        return res.status(400).json({ error: 'Missing data' });
-    }
-    const user = users.find(u => u.phone === phone);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    user.password = hash(newPassword);
-    saveUsers();
-    console.log('🔑 Password reset for:', user.name, phone);
-    res.json({ success: true, message: 'Password reset done' });
-});
-// ================================================
-
-
-app.listen(PORT, () => {
-    console.log('🚀 App Builder Server on ' + PORT);
-    console.log('👥 Users: ' + users.length + ' | 📱 Apps: ' + allApps.length);
+// ============================================
+// 🚀 START
+// ============================================
+loadFromFirebase().then(() => {
+    app.listen(PORT, () => {
+        console.log('═══════════════════════════════════');
+        console.log('🚀 APP BUILDER PRO v5.0');
+        console.log('═══════════════════════════════════');
+        console.log('🌐 Port: ' + PORT);
+        console.log('🔥 Storage: Firebase');
+        console.log('👥 Users: ' + users.length);
+        console.log('📱 Apps: ' + allApps.length);
+        console.log('═══════════════════════════════════');
+    });
 });
