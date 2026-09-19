@@ -489,55 +489,142 @@ ${permLines}
     fs.writeFileSync(`${appDir}/MainActivity.java`, `package ${safeName};
 
 import android.app.Activity;
-import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
-import android.view.WindowManager;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.webkit.CookieManager;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
+
     private WebView webView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
+
+        hideSystemBars();
+
         webView = new WebView(this);
+
         WebSettings s = webView.getSettings();
+
+        // JavaScript
         s.setJavaScriptEnabled(true);
+        s.setJavaScriptCanOpenWindowsAutomatically(true);
+
+        // Storage
         s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
+
+        // Files
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
+
+        // Network / Firebase
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            s.setMixedContentMode(
+                WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            );
+        }
+
+        // Media
         s.setMediaPlaybackRequiresUserGesture(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        
+
+        // View
+        s.setLoadWithOverviewMode(false);
+        s.setUseWideViewPort(false);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+
+        // Cookies - مهم لـ Firebase وبعض تسجيلات الدخول
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            cookies.setAcceptThirdPartyCookies(webView, true);
+        }
+
+        // JavaScript dialogs / alerts / prompts
+        webView.setWebChromeClient(new WebChromeClient());
+
+        // Links and page navigation
         webView.setWebViewClient(new WebViewClient());
-        webView.setBackgroundColor(Color.WHITE);
+
+        // Touch / buttons
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.setClickable(true);
+
+        // Debugging
+        WebView.setWebContentsDebuggingEnabled(true);
+
         webView.loadUrl("file:///android_asset/index.html");
+
         setContentView(webView);
     }
-    
+
+    private void hideSystemBars() {
+        Window window = getWindow();
+
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+
+            window.setDecorFitsSystemWindows(false);
+
+            WindowInsetsController controller =
+                window.getInsetsController();
+
+            if (controller != null) {
+                controller.hide(
+                    WindowInsets.Type.statusBars()
+                    | WindowInsets.Type.navigationBars()
+                    | WindowInsets.Type.displayCutout()
+                );
+
+                controller.setSystemBarsBehavior(
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                );
+            }
+
+        } else {
+
+            window.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            );
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+
+        if (hasFocus) {
+            hideSystemBars();
+        }
+    }
+
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
     }
-}`);
+}
+`);
 
     // ✅ دايمًا نعمل compile للـ resources
     const buildCmd = `cd ${appDir} && $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && javac -encoding UTF-8 -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java && $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets compiled.zip && $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && $ANDROID_HOME/build-tools/34.0.0/zipalign -f 4 unaligned.apk aligned.apk && (cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US") && $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out final.apk aligned.apk`;
