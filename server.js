@@ -419,6 +419,7 @@ app.post('/api/build/:id', auth, async (req, res) => {
         <item name="android:windowBackground">@android:color/white</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
@@ -518,10 +519,10 @@ public class MainActivity extends Activity {
     private WebView webView;
 
     @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
         
-        // ✅ شاشة كاملة
+        // شاشة كاملة
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -529,27 +530,56 @@ public class MainActivity extends Activity {
         );
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // ✅ شريط شفاف
+        // ✅ شريط الحالة بنفس لون التطبيق (أسود = مش هنغيره)
+        // بس نخليه شفاف لو ممكن
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
             getWindow().setStatusBarColor(Color.TRANSPARENT);
             getWindow().setNavigationBarColor(Color.TRANSPARENT);
         }
         
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.WHITE);
         
+        // ✅ إعدادات مهمة جداً للأزرار
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
+        s.setAllowFileAccessFromFileURLs(true);
+        s.setAllowUniversalAccessFromFileURLs(true);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setJavaScriptCanOpenWindowsAutomatically(true);
         
-        webView.setWebViewClient(new WebViewClient());
+        // ✅ WebViewClient - يخلي الأزرار تشتغل
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // كود JavaScript يتأكد إن الأزرار شغالة
+                String js = "(function(){" +
+                    "var els = document.querySelectorAll('button, a, [onclick], input, select, textarea');" +
+                    "for (var i = 0; i < els.length; i++) {" +
+                    "  els[i].style.pointerEvents = 'auto';" +
+                    "  els[i].style.touchAction = 'manipulation';" +
+                    "}" +
+                    "if (document.body) document.body.style.pointerEvents = 'auto';" +
+                    "console.log('Buttons enabled:', els.length);" +
+                    "})();";
+                view.evaluateJavascript(js, null);
+            }
+        });
+        
         webView.setWebChromeClient(new WebChromeClient());
+        webView.setBackgroundColor(Color.WHITE);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.setClickable(true);
+        webView.requestFocus(View.FOCUS_DOWN);
         
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
