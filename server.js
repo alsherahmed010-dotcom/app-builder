@@ -413,19 +413,6 @@ app.post('/api/build/:id', auth, async (req, res) => {
 </resources>`);
     
     // ✅ styles.xml - Android 16
-    fs.writeFileSync(`${appDir}/res/values/styles.xml`, `<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-    </style>
-</resources>`);
-
     // ✅ الأيقونة - تحويل من أي صيغة لـ PNG
     let hasIcon = false;
     if (appData.icon_url) {
@@ -481,15 +468,13 @@ app.post('/api/build/:id', auth, async (req, res) => {
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
 ${permLines}
     <application 
-        android:label="@string/app_name"
-        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''}
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true"
-        android:theme="@style/AppTheme">
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
         <activity 
             android:name=".MainActivity" 
             android:exported="true"
-            android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -510,7 +495,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -522,7 +506,6 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // شاشة كاملة
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -530,21 +513,10 @@ public class MainActivity extends Activity {
         );
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // ✅ شريط الحالة بنفس لون التطبيق (أسود = مش هنغيره)
-        // بس نخليه شفاف لو ممكن
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        }
-        
         webView = new WebView(this);
-        
-        // ✅ إعدادات مهمة جداً للأزرار
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setAllowFileAccessFromFileURLs(true);
@@ -553,60 +525,17 @@ public class MainActivity extends Activity {
         s.setUseWideViewPort(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setJavaScriptCanOpenWindowsAutomatically(true);
         
-        // ✅ WebViewClient - يخلي الأزرار تشتغل
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                // كود JavaScript يتأكد إن الأزرار شغالة
-                String js = "(function(){" +
-                    "var els = document.querySelectorAll('button, a, [onclick], input, select, textarea');" +
-                    "for (var i = 0; i < els.length; i++) {" +
-                    "  els[i].style.pointerEvents = 'auto';" +
-                    "  els[i].style.touchAction = 'manipulation';" +
-                    "}" +
-                    "if (document.body) document.body.style.pointerEvents = 'auto';" +
-                    "console.log('Buttons enabled:', els.length);" +
-                    "})();";
-                view.evaluateJavascript(js, null);
-            }
-        });
-        
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient());
         webView.setBackgroundColor(Color.WHITE);
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        webView.setClickable(true);
-        webView.requestFocus(View.FOCUS_DOWN);
-        
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            );
-        }
     }
     
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
 }`);
 
