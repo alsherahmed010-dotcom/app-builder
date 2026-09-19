@@ -499,13 +499,15 @@ ${permLines}
 import android.app.Activity;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 import android.graphics.Color;
 
 public class MainActivity extends Activity {
@@ -515,42 +517,74 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // ✅ شاشة كاملة
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // ✅ Edge-to-edge - WebView يمتد تحت شريط الحالة
+        Window window = getWindow();
+        window.requestFeature(Window.FEATURE_NO_TITLE);
+        
+        // ✅ Android 9+ - cutout mode
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.layoutInDisplayCutoutMode = 
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            window.setAttributes(attrs);
+        }
+        
+        // ✅ جعل الشرائط شفافة
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            Window window = getWindow();
             window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(Color.TRANSPARENT);
-            window.setNavigationBarColor(Color.TRANSPARENT);
+        }
+        
+        // ✅✅✅ Android 11+ (بيشمل Android 15 و 16) - الطريقة الرسمية
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false);
             
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.setDecorFitsSystemWindows(false);
-            } else {
-                window.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            // إخفاء الشرائط بالكامل
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 );
             }
+        } else {
+            // للإصدارات الأقدم
+            View decorView = window.getDecorView();
+            decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+            );
         }
-
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.TRANSPARENT);
         
-        // ✅ إصلاح: WebView يمتد تحت شريط الحالة
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            webView.setFitsSystemWindows(false);
+        // ✅ WebView
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.WHITE);
+        webView.setFitsSystemWindows(false);
+        webView.setPadding(0, 0, 0, 0);
+        
+        // ✅✅✅ مهم جداً - إزالة كل insets (إصلاح الشريط الأسود في Android 15/16)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            webView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override
+                public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                    // استخدم insets فارغة - يخلي المحتوى تحت الشريط
+                    return WindowInsets.CONSUMED;
+                }
+            });
+        } else {
+            webView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override
+                public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                    v.setPadding(0, 0, 0, 0);
+                    return insets.consumeSystemWindowInsets();
+                }
+            });
         }
         
         WebSettings s = webView.getSettings();
@@ -566,24 +600,18 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        
-        // ✅ مهم: السماح بالكليك على الأزرار
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setAllowUniversalAccessFromFileURLs(true);
         s.setAllowFileAccessFromFileURLs(true);
+        s.setDatabaseEnabled(true);
+        s.setSupportMultipleWindows(false);
         
-        // ✅ مهم: user agent مناسب
-        s.setUserAgentString(s.getUserAgentString() + " AppBuilder");
-
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
-        
-        // ✅ مهم: touch events شغالة
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
-        webView.requestFocus(View.FOCUS_DOWN);
         webView.setClickable(true);
-        webView.setLongClickable(true);
+        webView.requestFocus(View.FOCUS_DOWN);
         
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
@@ -592,15 +620,28 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            );
+        if (hasFocus) {
+            Window window = getWindow();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.setDecorFitsSystemWindows(false);
+                WindowInsetsController controller = window.getInsetsController();
+                if (controller != null) {
+                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    );
+                }
+            } else {
+                View decorView = window.getDecorView();
+                decorView.setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                );
+            }
         }
     }
     
