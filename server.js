@@ -470,17 +470,14 @@ ${permLines}
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.os.Build;
 
 public class MainActivity extends Activity {
     private WebView webView;
@@ -496,16 +493,9 @@ public class MainActivity extends Activity {
         );
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        }
-
         webView = new WebView(this);
         webView.setBackgroundColor(Color.WHITE);
-        webView.setFitsSystemWindows(false);
-        webView.setPadding(0, 0, 0, 0);
-
+        
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -515,45 +505,12 @@ public class MainActivity extends Activity {
         s.setAllowUniversalAccessFromFileURLs(true);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-        s.setSupportZoom(false);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setJavaScriptCanOpenWindowsAutomatically(true);
-
-        final String serverUrl = "${req.protocol}://${req.get('host')}/api/live-content/${id}";
-        final String localUrl = "file:///android_asset/index.html";
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request.isForMainFrame()) {
-                    view.loadUrl(localUrl);
-                }
-            }
-            
-            @Override
-            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request.isForMainFrame()) {
-                    view.loadUrl(localUrl);
-                }
-            }
-            
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                String js = "(function(){var els=document.querySelectorAll('button,a,[onclick],input,select,textarea');for(var i=0;i<els.length;i++){els[i].style.pointerEvents='auto';els[i].style.cursor='pointer';}if(document.body)document.body.style.pointerEvents='auto';})();";
-                view.evaluateJavascript(js, null);
-            }
-        });
         
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        webView.setClickable(true);
-        webView.requestFocus(View.FOCUS_DOWN);
-        
-        webView.loadUrl(serverUrl);
+        webView.setWebViewClient(new WebViewClient());
+        webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
     }
 
