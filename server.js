@@ -488,8 +488,26 @@ public class MainActivity extends Activity {
         s.setAllowUniversalAccessFromFileURLs(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        w.setWebViewClient(new WebViewClient());
-        w.loadUrl("file:///android_asset/index.html");
+        final String serverUrl = "${req.protocol}://${req.get('host')}/api/live-content/${id}";
+        final String localUrl = "file:///android_asset/index.html";
+        
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    view.loadUrl(localUrl);
+                }
+            }
+            
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                if (request.isForMainFrame()) {
+                    view.loadUrl(localUrl);
+                }
+            }
+        });
+        
+        webView.loadUrl(serverUrl);
         setContentView(w);
     }
     @Override
