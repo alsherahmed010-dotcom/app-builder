@@ -470,13 +470,12 @@ ${permLines}
     <application 
         android:label="@string/app_name"${hasIcon ? ' android:icon="@drawable/ic_launcher"' : ''}
         android:usesCleartextTraffic="true"
-        android:hardwareAccelerated="true"
-        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        android:hardwareAccelerated="true">
         <activity 
             android:name=".MainActivity" 
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -490,141 +489,33 @@ ${permLines}
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.view.View;
-import android.view.Window;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
-import android.webkit.CookieManager;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebSettings;
 
 public class MainActivity extends Activity {
-
-    private WebView webView;
-
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        hideSystemBars();
-
-        webView = new WebView(this);
-
-        WebSettings s = webView.getSettings();
-
-        // JavaScript
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        WebView w = new WebView(this);
+        WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
-        s.setJavaScriptCanOpenWindowsAutomatically(true);
-
-        // Storage
         s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
-
-        // Files
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
-
-        // Network / Firebase
-        if (android.os.Build.VERSION.SDK_INT >= 21) {
-            s.setMixedContentMode(
-                WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            );
-        }
-
-        // Media
         s.setMediaPlaybackRequiresUserGesture(false);
-
-        // View
-        s.setLoadWithOverviewMode(false);
-        s.setUseWideViewPort(false);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-
-        // Cookies - مهم لـ Firebase وبعض تسجيلات الدخول
-        CookieManager cookies = CookieManager.getInstance();
-        cookies.setAcceptCookie(true);
-
-        if (android.os.Build.VERSION.SDK_INT >= 21) {
-            cookies.setAcceptThirdPartyCookies(webView, true);
-        }
-
-        // JavaScript dialogs / alerts / prompts
-        webView.setWebChromeClient(new WebChromeClient());
-
-        // Links and page navigation
-        webView.setWebViewClient(new WebViewClient());
-
-        // Touch / buttons
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        webView.setClickable(true);
-
-        // Debugging
-        WebView.setWebContentsDebuggingEnabled(true);
-
-        webView.loadUrl("file:///android_asset/index.html");
-
-        setContentView(webView);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        w.setWebViewClient(new WebViewClient());
+        w.loadUrl("file:///android_asset/index.html");
+        setContentView(w);
     }
-
-    private void hideSystemBars() {
-        Window window = getWindow();
-
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-
-            window.setDecorFitsSystemWindows(false);
-
-            WindowInsetsController controller =
-                window.getInsetsController();
-
-            if (controller != null) {
-                controller.hide(
-                    WindowInsets.Type.statusBars()
-                    | WindowInsets.Type.navigationBars()
-                    | WindowInsets.Type.displayCutout()
-                );
-
-                controller.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                );
-            }
-
-        } else {
-
-            window.getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            );
-        }
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-
-        if (hasFocus) {
-            hideSystemBars();
-        }
-    }
-
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        super.onBackPressed();
     }
-}
-`);
+}`);
 
     // ✅ دايمًا نعمل compile للـ resources
     const buildCmd = `cd ${appDir} && $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled.zip && javac -encoding UTF-8 -source 1.8 -target 1.8 -classpath $ANDROID_HOME/platforms/android-34/android.jar -d . MainActivity.java && $ANDROID_HOME/build-tools/34.0.0/d8 --release --lib $ANDROID_HOME/platforms/android-34/android.jar --output . ${safeName.replace(/\./g,'/')}/MainActivity.class && $ANDROID_HOME/build-tools/34.0.0/aapt2 link -o unaligned.apk -I $ANDROID_HOME/platforms/android-34/android.jar --manifest AndroidManifest.xml -A assets compiled.zip && $ANDROID_HOME/build-tools/34.0.0/aapt add unaligned.apk classes.dex && $ANDROID_HOME/build-tools/34.0.0/zipalign -f 4 unaligned.apk aligned.apk && (cp /app/debug.keystore . 2>/dev/null || keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US") && $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out final.apk aligned.apk`;
