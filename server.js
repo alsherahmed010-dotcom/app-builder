@@ -342,55 +342,36 @@ app.post('/api/build/:id', auth, async (req, res) => {
     </head>`);
 
     // ✅ JavaScript للتحديث اللحظي
+    // ✅ كود بسيط - مش بيعمل document.write
     htmlContent += `<script>
-(function(){
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('button, [onclick], a').forEach(function(el) {
-            el.style.pointerEvents = 'auto';
-        });
-    });
-    var apiBase = '${req.protocol}://${req.get('host')}';
-    var appId = ${id};
-    var dbName = 'app_db_' + appId;
-    function openDB() {
-        return new Promise(function(resolve, reject) {
-            var req = indexedDB.open(dbName, 1);
-            req.onupgradeneeded = function(e) {
-                var db = e.target.result;
-                if (!db.objectStoreNames.contains('content')) db.createObjectStore('content');
-            };
-            req.onsuccess = function(e) { resolve(e.target.result); };
-            req.onerror = function(e) { reject(e.target.error); };
-        });
+(function() {
+    // تفعيل الأزرار
+    function enableButtons() {
+        var els = document.querySelectorAll('button, a, [onclick], input, select, textarea');
+        for (var i = 0; i < els.length; i++) {
+            els[i].style.pointerEvents = 'auto';
+            els[i].style.cursor = 'pointer';
+        }
     }
-    function saveContent(db, c) {
-        return new Promise(function(resolve) {
-            var tx = db.transaction(['content'], 'readwrite');
-            tx.objectStore('content').put(c, 'app_content');
-            tx.oncomplete = resolve;
-        });
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', enableButtons);
+    } else {
+        enableButtons();
     }
-    function loadContent(db) {
-        return new Promise(function(resolve) {
-            var req = db.transaction(['content'], 'readonly').objectStore('content').get('app_content');
-            req.onsuccess = function(e) { resolve(e.target.result); };
-        });
-    }
-    function apply(c) { if (c) { document.open(); document.write(c); document.close(); } }
-    function check() {
-        fetch(apiBase + '/api/live-content/' + appId)
-            .then(r => r.text())
-            .then(c => {
-                openDB().then(db => loadContent(db).then(s => {
-                    if (c !== s) saveContent(db, c).then(() => apply(c));
-                }));
+    
+    // التحديث اللحظي - بس بنسبة الأيقونة بس
+    setInterval(function() {
+        if (!navigator.onLine) return;
+        fetch('${req.protocol}://${req.get('host')}/api/check-update-icon/${id}')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.updated) {
+                    console.log('App updated - reload recommended');
+                }
             })
-            .catch(() => { openDB().then(db => loadContent(db).then(s => apply(s))); });
-    }
-    openDB().then(db => loadContent(db).then(s => {
-        if (s) apply(s);
-        if (navigator.onLine) check();
-    }));
+            .catch(function() {});
+    }, 60000);
 })();
 </script>`;
 
