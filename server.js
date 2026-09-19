@@ -517,84 +517,19 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        Window window = getWindow();
-        window.requestFeature(Window.FEATURE_NO_TITLE);
-        
-        // إخفاء شريط العنوان
-        window.setFlags(
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
-        // السماح بالمحتوى حول ثقب الكاميرا
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.layoutInDisplayCutoutMode = 
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            window.setAttributes(attrs);
+            getWindow().getAttributes().layoutInDisplayCutoutMode = 
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
-        
-        // للمنصة 30+ (Android 11+) - الحل الأساسي
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false);
-            
-            WindowInsetsController controller = window.getInsetsController();
-            if (controller != null) {
-                // إخفاء كل الشرائط
-                controller.hide(WindowInsets.Type.statusBars());
-                controller.hide(WindowInsets.Type.navigationBars());
-                controller.hide(WindowInsets.Type.systemBars());
-                
-                // سلوك: تظهر مؤقتاً عند السحب
-                controller.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                );
-            }
-        }
-        
-        // للمنصة 21-29
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP 
-            && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(Color.TRANSPARENT);
-            window.setNavigationBarColor(Color.TRANSPARENT);
-            
-            View decorView = window.getDecorView();
-            decorView.setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-            );
-        }
-        
-        // WebView
+
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.TRANSPARENT);
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            webView.setFitsSystemWindows(false);
-        }
-        
-        // إزالة كل insets (الحل الأساسي للشريط الأسود)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            webView.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
-                @Override
-                public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        // إلغاء كل الـ insets
-                        return WindowInsets.CONSUMED;
-                    } else {
-                        v.setPadding(0, 0, 0, 0);
-                        return insets.consumeSystemWindowInsets();
-                    }
-                }
-            });
-        }
         
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -607,18 +542,11 @@ public class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setSupportZoom(false);
         s.setMediaPlaybackRequiresUserGesture(false);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setJavaScriptCanOpenWindowsAutomatically(true);
-        s.setAllowUniversalAccessFromFileURLs(true);
-        s.setAllowFileAccessFromFileURLs(true);
-        
+
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
-        webView.setClickable(true);
-        webView.requestFocus(View.FOCUS_DOWN);
         
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
@@ -628,21 +556,14 @@ public class MainActivity extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            Window window = getWindow();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.setDecorFitsSystemWindows(false);
-                WindowInsetsController controller = window.getInsetsController();
+                final WindowInsetsController controller = getWindow().getInsetsController();
                 if (controller != null) {
-                    controller.hide(WindowInsets.Type.statusBars());
-                    controller.hide(WindowInsets.Type.navigationBars());
-                    controller.hide(WindowInsets.Type.systemBars());
-                    controller.setSystemBarsBehavior(
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    );
+                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 }
             } else {
-                View decorView = window.getDecorView();
-                decorView.setSystemUiVisibility(
+                getWindow().getDecorView().setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
